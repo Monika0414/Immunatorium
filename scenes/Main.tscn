@@ -81,13 +81,15 @@ offset_bottom = 50.0
 theme_override_font_sizes/font_size = 24
 text = ""
 
-[node name="FieldNoteLabel" type="Label" parent="UI"]
+[node name="FieldNoteLabel" type="RichTextLabel" parent="UI"]
 offset_left = 194.0
 offset_top = 214.0
 offset_right = 960.0
 offset_bottom = 250.0
-theme_override_font_sizes/font_size = 13
-autowrap_mode = 2
+theme_override_font_sizes/normal_font_size = 13
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
 visible = false
 text = ""
 
@@ -110,14 +112,14 @@ text = "Restart Level"
 [node name="DefenderSidebarPanel" type="Panel" parent="UI"]
 offset_left = 4.0
 offset_top = 120.0
-offset_right = 78.0
-offset_bottom = 644.0
+offset_right = 66.0
+offset_bottom = 576.0
 
 [node name="DefenderBar" type="VBoxContainer" parent="UI"]
 offset_left = 8.0
 offset_top = 124.0
-offset_right = 74.0
-offset_bottom = 636.0
+offset_right = 62.0
+offset_bottom = 568.0
 theme_override_constants/separation = 4
 
 [node name="IntroLayer" type="CanvasLayer" parent="."]
@@ -143,13 +145,14 @@ offset_right = 1130.0
 offset_bottom = 210.0
 mouse_filter = 0
 
-[node name="RulesLabel" type="Label" parent="IntroLayer/Panel"]
+[node name="RulesLabel" type="RichTextLabel" parent="IntroLayer/Panel"]
 offset_left = 20.0
 offset_top = 16.0
 offset_right = 790.0
 offset_bottom = 140.0
-theme_override_font_sizes/font_size = 18
-autowrap_mode = 3
+theme_override_font_sizes/normal_font_size = 15
+bbcode_enabled = true
+scroll_active = false
 text = "Hey buddy. It's quite bloody here isn't it?"
 
 [node name="StartButton" type="Button" parent="IntroLayer/Panel"]
@@ -177,23 +180,27 @@ offset_right = 776.0
 offset_bottom = 434.0
 mouse_filter = 0
 
-[node name="TitleLabel" type="Label" parent="GameOverLayer/Panel"]
+[node name="TitleLabel" type="RichTextLabel" parent="GameOverLayer/Panel"]
 offset_left = 20.0
 offset_top = 24.0
 offset_right = 380.0
 offset_bottom = 64.0
-theme_override_font_sizes/font_size = 30
-horizontal_alignment = 1
-text = "LEVEL COMPLETE!"
+theme_override_font_sizes/normal_font_size = 28
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+text = "[center][b]PATIENT SAVED![/b][/center]"
 
-[node name="SubtitleLabel" type="Label" parent="GameOverLayer/Panel"]
+[node name="SubtitleLabel" type="RichTextLabel" parent="GameOverLayer/Panel"]
 offset_left = 20.0
 offset_top = 76.0
 offset_right = 380.0
-offset_bottom = 116.0
-theme_override_font_sizes/font_size = 18
-horizontal_alignment = 1
-text = "Grade S (100/100)"
+offset_bottom = 140.0
+theme_override_font_sizes/normal_font_size = 16
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+text = "[center]Grade S — 100/100[/center]"
 
 [node name="RetryButton" type="Button" parent="GameOverLayer/Panel"]
 offset_left = 130.0

@@ -12,14 +12,14 @@ extends Node2D
 @onready var status_label: Label = $UI/StatusLabel
 @onready var selected_label: Label = $UI/SelectedLabel
 @onready var level_label: Label = $UI/LevelLabel
-@onready var field_note_label: Label = $UI/FieldNoteLabel
+@onready var field_note_label: RichTextLabel = $UI/FieldNoteLabel
 @onready var intro_layer: CanvasLayer = $IntroLayer
 @onready var intro_next_button: Button = $IntroLayer/Panel/StartButton
-@onready var intro_dialogue_label: Label = $IntroLayer/Panel/RulesLabel
+@onready var intro_dialogue_label: RichTextLabel = $IntroLayer/Panel/RulesLabel
 @onready var doctor_sprite: TextureRect = $IntroLayer/DoctorSprite
 @onready var game_over_layer: CanvasLayer = $GameOverLayer
-@onready var game_over_title: Label = $GameOverLayer/Panel/TitleLabel
-@onready var game_over_subtitle: Label = $GameOverLayer/Panel/SubtitleLabel
+@onready var game_over_title: RichTextLabel = $GameOverLayer/Panel/TitleLabel
+@onready var game_over_subtitle: RichTextLabel = $GameOverLayer/Panel/SubtitleLabel
 @onready var retry_button: Button = $GameOverLayer/Panel/RetryButton
 @onready var preview_aura_ring: AuraRing = $PreviewAuraRing
 @onready var defender_bar: VBoxContainer = $UI/DefenderBar
@@ -39,11 +39,22 @@ var defender_cards: Array = []  # [{"btn": Button, "cost": int}, ...] — built 
 # each one, and the final "Next" click both closes the intro and starts the
 # level — there's no separate "Start" button/label).
 const DOCTOR_LINES: Array[String] = [
-	"Hey buddy. It's quite bloody here isn't it?",
-	"My patient is having quite a trouble here. He cut his hand while climbing a tree to impress his girlfriend. Teens nowadays are crazy, aren't they. Anyway, infection got in through the wound and now your mission is to defend so he doesn't go out of the dating market forever.",
-	"Good luck!",
+	"[i]Oh good, you're here.[/i] Hey buddy — it's quite [b]bloody[/b] in here, isn't it?",
+	"So. My patient thought climbing a tree was a great way to impress his girlfriend. [b]Bold strategy.[/b] Cut his hand wide open, infection strolled right in, and now — congratulations — [i]you're[/i] the only thing standing between him and being single forever.",
+	"[b]Good luck.[/b] [i]Try not to lose him.[/i] No pressure.",
 ]
 var intro_line_index: int = 0
+
+# Typewriter reveal for the current line, done via RichTextLabel's own
+# visible_characters (bbcode-aware — it counts glyphs, not raw string index,
+# so a tag like [b] never gets sliced in half mid-reveal the way a plain
+# String.substr() would). The mouth only animates while a character is
+# actively still appearing (see _update_doctor_talk_cycle), and rests closed
+# once the full line is on screen — without that gate she was flapping her
+# mouth nonstop the whole time a line just sat there waiting for a click,
+# which read as a nervous tic instead of "talking."
+const DOCTOR_CHARS_PER_SECOND: float = 32.0
+var _intro_reveal_chars: float = 0.0
 
 const DOCTOR_IDLE_TEXTURE: Texture2D = preload("res://art/characters/doctor_idle.png")
 const DOCTOR_TALK_TEXTURE: Texture2D = preload("res://art/characters/doctor_talk.png")
@@ -76,6 +87,7 @@ var level_config: Dictionary = {}
 var level_elapsed: float = 0.0
 var time_since_spawn: float = 0.0
 var game_over: bool = false
+var game_over_won: bool = false  # set by _end_game() — lets tests check outcome without parsing display copy/flavor text
 
 ## --- Wave-scripted levels (level_config.has("waves"), see GameData.LEVELS) ---
 var wave_index: int = 0
@@ -117,7 +129,7 @@ func _ready() -> void:
 
 	doctor_sprite.expand_mode = TextureRect.EXPAND_FIT_HEIGHT_PROPORTIONAL
 	doctor_sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	intro_dialogue_label.text = DOCTOR_LINES[0]
+	_begin_intro_line(0)
 
 	_create_slot_buttons()
 	game_over = true  # paused behind the intro popup until Start is pressed
@@ -135,7 +147,7 @@ func _build_defender_bar() -> void:
 		var btn := Button.new()
 		# Width 0 = let the VBoxContainer stretch it to fill the sidebar;
 		# height fixed so the card reads as a square icon, not a name-plate.
-		btn.custom_minimum_size = Vector2(0, 64)
+		btn.custom_minimum_size = Vector2(0, 52)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.tooltip_text = GameData.defender_tooltip(type)
 		btn.pressed.connect(_select_type.bind(type))
@@ -183,15 +195,15 @@ func _build_defender_bar() -> void:
 		var badge_bg := ColorRect.new()
 		badge_bg.color = Color(0, 0, 0, 0.65)
 		badge_bg.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		badge_bg.offset_left = -24
-		badge_bg.offset_top = -16
+		badge_bg.offset_left = -20
+		badge_bg.offset_top = -13
 		badge_bg.offset_right = -1
 		badge_bg.offset_bottom = -1
 		badge_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		btn.add_child(badge_bg)
 		var badge := Label.new()
 		badge.text = str(int(stats.cost))
-		badge.add_theme_font_size_override("font_size", 11)
+		badge.add_theme_font_size_override("font_size", 10)
 		badge.add_theme_color_override("font_color", Color.WHITE)
 		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -219,20 +231,48 @@ func _refresh_defender_bar_affordability() -> void:
 		entry.btn.modulate = Color.WHITE if affordable else Color(0.42, 0.42, 0.42)
 
 
-## Cheap "is she talking" cel-swap: alternates idle/talk textures on a fixed
-## interval for as long as the intro dialogue is on screen.
+## Loads a new line's bbcode into the label with 0 characters revealed yet —
+## _update_doctor_talk_cycle() does the actual per-frame reveal.
+func _begin_intro_line(index: int) -> void:
+	intro_line_index = index
+	intro_dialogue_label.text = DOCTOR_LINES[index]
+	_intro_reveal_chars = 0.0
+	intro_dialogue_label.visible_characters = 0
+
+
+## Typewriter-reveals the current line via visible_characters (bbcode-safe —
+## see the const comment above), and only cel-swaps idle/talk textures while a
+## character is actually still appearing — once the full line is on screen she
+## settles back to idle and holds still until the next click.
 func _update_doctor_talk_cycle(delta: float) -> void:
-	_doctor_talk_timer += delta
-	if _doctor_talk_timer >= DOCTOR_TALK_FRAME_TIME:
+	var total_chars: int = intro_dialogue_label.get_total_character_count()
+	if intro_dialogue_label.visible_characters < total_chars:
+		_intro_reveal_chars = min(total_chars, _intro_reveal_chars + DOCTOR_CHARS_PER_SECOND * delta)
+		intro_dialogue_label.visible_characters = int(_intro_reveal_chars)
+
+		_doctor_talk_timer += delta
+		if _doctor_talk_timer >= DOCTOR_TALK_FRAME_TIME:
+			_doctor_talk_timer = 0.0
+			_doctor_mouth_open = not _doctor_mouth_open
+			doctor_sprite.texture = DOCTOR_TALK_TEXTURE if _doctor_mouth_open else DOCTOR_IDLE_TEXTURE
+	elif _doctor_mouth_open:
+		_doctor_mouth_open = false
 		_doctor_talk_timer = 0.0
-		_doctor_mouth_open = not _doctor_mouth_open
-		doctor_sprite.texture = DOCTOR_TALK_TEXTURE if _doctor_mouth_open else DOCTOR_IDLE_TEXTURE
+		doctor_sprite.texture = DOCTOR_IDLE_TEXTURE
 
 
 func _on_intro_next_pressed() -> void:
-	intro_line_index += 1
-	if intro_line_index < DOCTOR_LINES.size():
-		intro_dialogue_label.text = DOCTOR_LINES[intro_line_index]
+	var total_chars: int = intro_dialogue_label.get_total_character_count()
+	if intro_dialogue_label.visible_characters < total_chars:
+		# First click while she's still "talking" just finishes the line
+		# instantly instead of skipping it — same convention as most VN/dialogue
+		# boxes, and it means an eager clicker never loses text.
+		_intro_reveal_chars = total_chars
+		intro_dialogue_label.visible_characters = total_chars
+		return
+
+	if intro_line_index + 1 < DOCTOR_LINES.size():
+		_begin_intro_line(intro_line_index + 1)
 	else:
 		_on_start_pressed()
 
@@ -577,7 +617,7 @@ func _on_kill_scored(defender_type: int, enemy_type: int) -> void:
 func _show_field_note(text: String) -> void:
 	if text.is_empty():
 		return
-	var full_text: String = "Field Note: " + text
+	var full_text: String = "[b]🔬 Field Note:[/b] [i]%s[/i]" % text
 	field_note_label.text = full_text
 	field_note_label.visible = true
 	# Guarded like _flash_status: without this, a timer armed by one note
@@ -614,8 +654,20 @@ func _compute_efficiency_grade() -> Dictionary:
 	return {"score": score, "grade": grade}
 
 
+## Grade -> {color, flavor line}. Keeps the doctor's "dating market" joke from
+## the intro running through to the payoff instead of dropping it the moment
+## the level actually starts.
+const GRADE_FLAVOR: Dictionary = {
+	"S": {"color": "#f2d94e", "line": "Flawless. He owes you a best-man speech."},
+	"A": {"color": "#8ee08e", "line": "Great work — the immune system thanks you."},
+	"B": {"color": "#7fc7e8", "line": "He'll live. Barely. Might want to rethink tree-climbing."},
+	"C": {"color": "#e8a15c", "line": "Scraped through. Please never do that again."},
+}
+
+
 func _end_game(won: bool) -> void:
 	game_over = true
+	game_over_won = won
 	# Stop combat resolution outright — game_over alone only gates spawning
 	# (see the checks below in _process), but Lane._process() drives its own
 	# movement/attacks every frame regardless, so without this, enemies kept
@@ -624,13 +676,15 @@ func _end_game(won: bool) -> void:
 		l.set_process(false)
 	if won:
 		var result: Dictionary = _compute_efficiency_grade()
-		game_over_title.text = "LEVEL COMPLETE!"
-		game_over_subtitle.text = "Score: %d/100" % int(round(result.score))
+		var flavor: Dictionary = GRADE_FLAVOR.get(result.grade, GRADE_FLAVOR.C)
+		game_over_title.text = "[center][b]🎉 PATIENT SAVED![/b][/center]"
+		game_over_subtitle.text = "[center]Grade [b][color=%s]%s[/color][/b] — %d/100\n[i]%s[/i][/center]" % \
+			[flavor.color, result.grade, int(round(result.score)), flavor.line]
 		SaveData.last_level_grade = result.grade
 		SaveData.save_game()
 		SFX.play_win()
 	else:
-		game_over_title.text = "BODY HEALTH DEPLETED"
-		game_over_subtitle.text = "The infection got through. Try again?"
+		game_over_title.text = "[center][b]💀 INFECTION WINS[/b][/center]"
+		game_over_subtitle.text = "[center]He's cancelling the date. Again?[/center]"
 		SFX.play_lose()
 	game_over_layer.visible = true

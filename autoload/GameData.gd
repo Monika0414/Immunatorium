@@ -172,6 +172,10 @@ func defender_stats_has_aura(stats: Dictionary) -> bool:
 
 
 func defender_tooltip(t: int) -> String:
+	# Kept short on purpose: Godot's default tooltip renders as one unwrapped
+	# box, so a long line (e.g. the biology trivia in FIELD_NOTES) blows it up
+	# into a huge popup. Those facts have their own dedicated reveal-on-kill
+	# popup (see main.gd's _show_field_note) — no need to duplicate them here.
 	var s: Dictionary = DEFENDER_STATS.get(t, {})
 	if s.is_empty():
 		return DEFENDER_NAMES.get(t, "Unknown")
@@ -180,8 +184,6 @@ func defender_tooltip(t: int) -> String:
 		"HP %d | Power %d | Rate %.1f/s | Range %d | Cost %d RP" % [s.hp, s.power, s.attack_rate, s.range, s.cost],
 		DEFENDER_ABILITIES.get(t, ""),
 	]
-	if FIELD_NOTES.has(t):
-		lines.append(FIELD_NOTES[t])
 	return "\n".join(lines)
 
 

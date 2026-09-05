@@ -1,0 +1,9 @@
+[gd_resource type="Theme" format=3]
+
+[resource]
+; Only overrides the tooltip label's font size — every other Control in this
+; project sets its own theme_override_font_sizes/font_size explicitly, so a
+; project-wide default theme change would only actually reach the one place
+; that was still using the engine default: the hover tooltip on the sidebar
+; defender cards (see GameData.defender_tooltip / _build_defender_bar).
+TooltipLabel/font_sizes/font_size = 12

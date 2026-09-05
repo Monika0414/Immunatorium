@@ -38,7 +38,7 @@ static func run(t: TestFramework, tree: SceneTree) -> void:
 
 	t.check(main.game_over, "Level reaches an end state within the simulation budget (didn't stall)")
 	if main.game_over:
-		var won: bool = main.game_over_title.text == "LEVEL COMPLETE!"
+		var won: bool = main.game_over_won
 		t.check(won, "A bare-minimum bot (Neutrophils only, no strategy) clears Level 1 (Body Health: %.0f/100, got: '%s')" \
 			% [main.body_health, main.game_over_title.text])
 		if won:
