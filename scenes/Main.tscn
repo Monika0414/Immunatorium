@@ -129,47 +129,44 @@ mouse_filter = 0
 color = Color(0, 0, 0, 0.75)
 
 [node name="Panel" type="Panel" parent="IntroLayer"]
-offset_left = 226.0
-offset_top = 10.0
-offset_right = 926.0
-offset_bottom = 638.0
+offset_left = 316.0
+offset_top = 154.0
+offset_right = 836.0
+offset_bottom = 494.0
 mouse_filter = 0
 
 [node name="TitleLabel" type="Label" parent="IntroLayer/Panel"]
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 680.0
-offset_bottom = 60.0
-theme_override_font_sizes/font_size = 32
+offset_left = 16.0
+offset_top = 14.0
+offset_right = 504.0
+offset_bottom = 48.0
+theme_override_font_sizes/font_size = 24
 horizontal_alignment = 1
 text = "IMMUNATORIUM"
 
 [node name="RulesLabel" type="Label" parent="IntroLayer/Panel"]
-offset_left = 30.0
-offset_top = 72.0
-offset_right = 670.0
-offset_bottom = 542.0
+offset_left = 24.0
+offset_top = 52.0
+offset_right = 496.0
+offset_bottom = 260.0
 theme_override_font_sizes/font_size = 15
 autowrap_mode = 3
-text = "Evil cells have broken through a wound in the skin and are advancing down each vessel toward your body's Core.
+text = "Germs snuck in through a wound. Rude.
 
-If a hostile cell reaches the Core, your Body Health drops. If Body Health runs out, you lose.
+Place immune cells along the vessels to zap them before they reach your Core.
 
-Your job: place immune cells into open slots along the vessels to intercept and destroy the invaders before they get through.
+• Click glowing orbs for RP — your recruitment budget.
+• Support cells don't fight, they hype up whoever's next to them.
+• \"Wave incoming\" means duck — every lane gets rushed at once.
 
-• Select a defender from the sidebar (shown by icon — hover for its stats and ability), then click an open slot to place it.
-• Watch for glowing orbs drifting down the board — click them to collect Recruitment Points (RP), your main resource. RP also trickles in slowly on its own.
-• Support cells don't attack, but combine with your attackers: Helper T boosts a neighbor's power, Dendritic marks enemies to take extra damage from everyone, Mast Cell slows anything nearby.
-• Watch for \"a wave is approaching\" — every lane gets hit at once.
-
-Survive every wave before the timer runs out to clear the level."
+Body Health hits zero, it's game over. Don't. Go be a hero cell."
 
 [node name="StartButton" type="Button" parent="IntroLayer/Panel"]
-offset_left = 280.0
-offset_top = 566.0
-offset_right = 420.0
-offset_bottom = 606.0
-theme_override_font_sizes/font_size = 20
+offset_left = 190.0
+offset_top = 276.0
+offset_right = 330.0
+offset_bottom = 312.0
+theme_override_font_sizes/font_size = 18
 text = "Start"
 
 [node name="GameOverLayer" type="CanvasLayer" parent="."]
