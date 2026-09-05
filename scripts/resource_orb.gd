@@ -7,6 +7,7 @@ class_name ResourceOrb
 ## trickle/safety net, not the main loop.
 
 signal collected(amount: int)
+signal expired()  # fired when it fades out uncollected, so the caller's tracking array stays in sync
 
 @export var amount: int = 15
 @export var fall_target_y: float = 220.0
@@ -42,6 +43,7 @@ func _process(delta: float) -> void:
 		var fade_t: float = (_life_timer - lifetime_after_landing) / fade_duration
 		modulate.a = clampf(1.0 - fade_t, 0.0, 1.0)
 		if modulate.a <= 0.0:
+			expired.emit()
 			queue_free()
 
 

@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/Lane.tscn" id="2"]
 [ext_resource type="Script" path="res://scripts/ambient_particles.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/aura_ring.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/wound_shape.gd" id="5"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -17,6 +18,9 @@ color = Color(0.62, 0.4, 0.36, 1)
 
 [node name="AmbientParticles" type="Node2D" parent="."]
 script = ExtResource("3")
+
+[node name="WoundShape" type="Node2D" parent="."]
+script = ExtResource("5")
 
 [node name="Lane1" parent="." instance=ExtResource("2")]
 lane_y = 260.0
@@ -77,9 +81,9 @@ theme_override_font_sizes/font_size = 24
 text = ""
 
 [node name="FieldNoteLabel" type="Label" parent="UI"]
-offset_left = 20.0
+offset_left = 194.0
 offset_top = 214.0
-offset_right = 1130.0
+offset_right = 960.0
 offset_bottom = 250.0
 theme_override_font_sizes/font_size = 13
 autowrap_mode = 2
@@ -102,12 +106,18 @@ offset_right = 1130.0
 offset_bottom = 86.0
 text = "Restart Level"
 
-[node name="DefenderBar" type="HBoxContainer" parent="UI"]
-offset_left = 20.0
+[node name="DefenderSidebarPanel" type="Panel" parent="UI"]
+offset_left = 4.0
 offset_top = 120.0
-offset_right = 1130.0
-offset_bottom = 210.0
-theme_override_constants/separation = 8
+offset_right = 78.0
+offset_bottom = 644.0
+
+[node name="DefenderBar" type="VBoxContainer" parent="UI"]
+offset_left = 8.0
+offset_top = 124.0
+offset_right = 74.0
+offset_bottom = 636.0
+theme_override_constants/separation = 4
 
 [node name="IntroLayer" type="CanvasLayer" parent="."]
 layer = 20
@@ -147,7 +157,7 @@ If a hostile cell reaches the Core, your Body Health drops. If Body Health runs 
 
 Your job: place immune cells into open slots along the vessels to intercept and destroy the invaders before they get through.
 
-• Select a defender below (shown by icon — hover for its stats and ability), then click an open slot to place it.
+• Select a defender from the sidebar (shown by icon — hover for its stats and ability), then click an open slot to place it.
 • Watch for glowing orbs drifting down the board — click them to collect Recruitment Points (RP), your main resource. RP also trickles in slowly on its own.
 • Support cells don't attack, but combine with your attackers: Helper T boosts a neighbor's power, Dendritic marks enemies to take extra damage from everyone, Mast Cell slows anything nearby.
 • Watch for \"a wave is approaching\" — every lane gets hit at once.

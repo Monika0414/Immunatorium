@@ -15,6 +15,7 @@ func _ready() -> void:
 	TestGameData.run(t)
 	TestSaveData.run(t)
 	await _run_lane_combat_tests(t)
+	await TestPlaythrough.run(t, get_tree())
 
 	SFX.stop_all()  # release our own cached AudioStreamWAV resources
 	await get_tree().process_frame  # let queue_free()'d nodes finish cleaning up
@@ -64,19 +65,28 @@ func _run_lane_combat_tests(t: TestFramework) -> void:
 	var expected_dmg: int = int(round(placed.power * GameData.get_multiplier(placed.type, enemy.type)))
 	t.check_eq(expected_dmg, 16, "Neutrophil vs Bacteria hits for 16 (8 power x 2.0 multiplier)")
 
-	# Note: check lane.enemies membership, not is_instance_valid(enemy) — a
-	# killed enemy calls queue_free(), whose actual deletion is deferred to
-	# the engine's normal idle-frame processing, which never happens inside a
-	# tight synchronous loop like this one that never yields control back.
-	# enemies.erase() on the other hand happens synchronously at the moment
-	# of death, so it's the correct thing to poll here.
+	# Poll enemy.hp, not lane.enemies membership: Bacteria has a die animation,
+	# so it now deliberately STAYS in lane.enemies until that animation's
+	# animation_finished signal fires (this was bug fix #3 from the code
+	# review — the win-check and Lane.reset() were previously able to act on
+	# a corpse mid-death-animation). animation_finished is driven by the
+	# engine's own per-frame dispatch on AnimatedSprite2D, which a tight
+	# synchronous lane._process() loop never triggers (same class of gotcha as
+	# queue_free()'s deferred deletion) — so hp is the right thing to poll for
+	# "did combat actually resolve", independent of animation/cleanup timing.
 	var dt: float = 0.1
 	var ticks: int = 0
-	while lane.enemies.has(enemy) and ticks < 200:  # generous ceiling: a real hang shows up as a failure, not a stall
+	while is_instance_valid(enemy) and enemy.hp > 0 and ticks < 200:  # generous ceiling: a real hang shows up as a failure, not a stall
 		lane._process(dt)
 		ticks += 1
-	t.check(not lane.enemies.has(enemy), "Bacteria dies within a bounded number of ticks")
+	t.check(is_instance_valid(enemy) and enemy.hp <= 0, "Bacteria dies within a bounded number of ticks")
+	t.check(lane.enemies.has(enemy), "Killed enemy stays in lane.enemies until its die animation actually finishes")
 	t.check(is_instance_valid(placed) and placed.hp > 0, "Neutrophil survives the exchange (Bacteria is comparatively weak)")
+
+	# Simulate the animation actually finishing (no real engine frames run in
+	# this synchronous test) and confirm the deferred cleanup path works.
+	enemy._on_sprite_animation_finished()
+	t.check(not lane.enemies.has(enemy), "Once the die animation finishes, the enemy is removed from lane.enemies")
 
 	t.check_eq(kill_events.size(), 1, "kill_scored fires exactly once for the kill")
 	if kill_events.size() > 0:

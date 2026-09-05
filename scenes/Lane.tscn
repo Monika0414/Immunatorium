@@ -6,8 +6,8 @@
 [node name="Lane" type="Node2D"]
 script = ExtResource("1")
 slot_count = 6
-slot_spacing = 140.0
-slot_origin_x = 120.0
+slot_spacing = 115.0
+slot_origin_x = 240.0
 lane_y = 300.0
 
 [node name="VesselOutline" type="Line2D" parent="."]
@@ -42,15 +42,15 @@ antialiased = true
 
 [node name="Body" type="Node2D" parent="Core"]
 script = ExtResource("2")
-radius = 36.0
+radius = 30.0
 color = Color(0.75, 0.15, 0.2, 1)
 outline_color = Color(1, 0.85, 0.85, 0.6)
 outline_width = 3.0
 
 [node name="Label" type="Label" parent="Core"]
-offset_left = -60.0
+offset_left = -50.0
 offset_top = -12.0
-offset_right = 60.0
+offset_right = 50.0
 offset_bottom = 12.0
 theme_override_font_sizes/font_size = 12
 horizontal_alignment = 1

@@ -24,6 +24,9 @@ var aura_power_buff: float = 0.0  # e.g. Helper T: 0.25 = +25% power to one near
 var aura_mark_damage: float = 0.0  # e.g. Dendritic: 0.25 = enemies in range take +25% damage from everyone
 var power_multiplier: float = 1.0  # reset and reapplied each tick by Lane._apply_auras (Helper T's target)
 var devour_on_kill: bool = false  # e.g. Macrophage: only play the attack anim on an actual kill
+var produces_orb_interval: float = 0.0  # e.g. Stem Cell: >0 means it periodically produces a bonus RP orb
+var produces_orb_amount: int = 0
+var production_cooldown: float = 0.0  # ticked down by Lane._update_resource_production
 
 const TARGET_SPRITE_DIAMETER: float = 84.0
 
@@ -34,6 +37,7 @@ const TARGET_SPRITE_DIAMETER: float = 84.0
 @onready var aura_ring: AuraRing = $AuraRing
 
 var _has_attack_animation: bool = false
+var _buffed: bool = false
 
 
 func setup(t: int) -> void:
@@ -49,6 +53,9 @@ func setup(t: int) -> void:
 	aura_power_buff = stats.get("aura_power_buff", 0.0)
 	aura_mark_damage = stats.get("aura_mark_damage", 0.0)
 	devour_on_kill = stats.get("devour_on_kill", false)
+	produces_orb_interval = stats.get("produces_orb_interval", 0.0)
+	produces_orb_amount = stats.get("produces_orb_amount", 0)
+	production_cooldown = produces_orb_interval  # don't produce instantly on placement
 
 	var anim: Dictionary = SpriteAnimator.build(sprite, stats, TARGET_SPRITE_DIAMETER)
 	if anim.has_sprite:
@@ -59,7 +66,7 @@ func setup(t: int) -> void:
 		body.color = stats.color
 		body.visible = true
 
-	if aura_slow > 0.0 or aura_power_buff > 0.0 or aura_mark_damage > 0.0:
+	if has_aura():
 		aura_ring.visible = true
 		aura_ring.base_color = stats.color
 
@@ -80,6 +87,13 @@ func _on_sprite_animation_finished() -> void:
 		sprite.play("idle")
 
 
+## Single canonical definition of "has any aura" for an already-placed
+## instance — GameData.defender_stats_has_aura() is the equivalent for a raw
+## stats dict (used before an instance exists, e.g. the hover preview).
+func has_aura() -> bool:
+	return aura_slow > 0.0 or aura_power_buff > 0.0 or aura_mark_damage > 0.0
+
+
 func set_aura_radius(px: float) -> void:
 	aura_ring.radius = px
 
@@ -91,6 +105,13 @@ func set_aura_active(is_active: bool) -> void:
 func set_buffed(is_buffed: bool) -> void:
 	# Visual tell for "this one is currently getting Helper T's +25% power" —
 	# a warm gold tint on the whole visual, not just a number changing.
+	# Only touches modulate on an actual state change: this runs every tick
+	# for every occupied slot via Lane._apply_auras, so writing unconditionally
+	# would mean a Color alloc + property write ~60x/sec per slot for no
+	# visible effect in the overwhelmingly common case (nothing buffed).
+	if is_buffed == _buffed:
+		return
+	_buffed = is_buffed
 	visual.modulate = Color(1.25, 1.12, 0.7) if is_buffed else Color.WHITE
 
 

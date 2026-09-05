@@ -28,6 +28,7 @@ var engaged_defender: Defender = null
 var _has_attack_animation: bool = false
 var _has_die_animation: bool = false
 var _dying: bool = false
+var _marked: bool = false
 
 @onready var visual: Node2D = $Visual
 @onready var body: CircleShape = $Visual/Body
@@ -42,6 +43,13 @@ func effective_move_speed() -> float:
 func set_marked(is_marked: bool) -> void:
 	# Visual tell for "Dendritic has this one tagged, it's taking +25% from
 	# everyone" — a cool cyan tint, distinct from Helper T's warm gold buff tint.
+	# Only touches modulate on an actual state change — this runs every tick
+	# for every enemy via Lane._apply_auras, so writing unconditionally would
+	# mean a Color alloc + property write ~60x/sec per enemy for no visible
+	# effect in the overwhelmingly common case (nothing marked).
+	if is_marked == _marked:
+		return
+	_marked = is_marked
 	visual.modulate = Color(0.65, 1.0, 1.05) if is_marked else Color.WHITE
 
 
@@ -79,6 +87,12 @@ func _on_sprite_animation_finished() -> void:
 	if sprite.animation == "attack":
 		sprite.play("idle")
 	elif sprite.animation == "die":
+		# Only leave lane.enemies here, once the death is actually done playing
+		# — removing it in die() instead let "all lanes clear" (the win check)
+		# and Lane.reset() both act on a corpse mid-animation as if it had
+		# already fully resolved.
+		if lane:
+			lane.on_enemy_killed(self)
 		queue_free()
 
 
@@ -95,13 +109,13 @@ func take_damage(amount: float) -> void:
 
 
 func die() -> void:
-	if lane:
-		lane.on_enemy_killed(self)
 	if _dying:
 		return
 	_dying = true
 	hp_label.visible = false
 	if _has_die_animation:
-		sprite.play("die")  # queue_free happens in _on_sprite_animation_finished
+		sprite.play("die")  # lane.on_enemy_killed() + queue_free() happen in _on_sprite_animation_finished
 	else:
+		if lane:
+			lane.on_enemy_killed(self)
 		queue_free()

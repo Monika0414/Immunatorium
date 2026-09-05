@@ -8,6 +8,7 @@ extends Node
 enum DefenderType {
 	NEUTROPHIL, MACROPHAGE, COMPLEMENT, NK_CELL, EOSINOPHIL,
 	B_CELL, HELPER_T, CYTOTOXIC_T, MAST_CELL, DENDRITIC,
+	STEM_CELL,  # not in the original spec roster — added as the Sunflower-equivalent economy unit
 }
 
 enum EnemyType { BACTERIA, VIRUS, FUNGUS, PARASITE, CANCER, STAPH, STREP }
@@ -15,30 +16,46 @@ enum EnemyType { BACTERIA, VIRUS, FUNGUS, PARASITE, CANCER, STAPH, STREP }
 # hp, power (0 = support unit, no direct damage), attack_rate (atk/s, 0 = none),
 # range (slots ahead), cost (RP), color (placeholder art swap point).
 const DEFENDER_STATS := {
-	DefenderType.NEUTROPHIL: {"hp": 20.0, "power": 8.0, "attack_rate": 1.5, "range": 1, "cost": 25, "color": Color8(235, 220, 80), "sprite": "res://art/defenders/neutrophil_idle.png"},
+	DefenderType.NEUTROPHIL: {"hp": 20.0, "power": 8.0, "attack_rate": 1.5, "range": 1, "cost": 25, "color": Color8(235, 220, 80), "sprite": "res://art/defenders/neutrophil_idle.png", "attack_sprites": ["res://art/defenders/neutrophil_attack_1.png"], "devour_on_kill": true},
 	DefenderType.MACROPHAGE: {"hp": 50.0, "power": 15.0, "attack_rate": 0.7, "range": 1, "cost": 50, "color": Color8(150, 90, 210), "sprite": "res://art/defenders/macrophage_idle.png", "attack_sprites": ["res://art/defenders/macrophage_attack_1.png", "res://art/defenders/macrophage_attack_2.png", "res://art/defenders/macrophage_attack_3.png"], "devour_on_kill": true},
 	DefenderType.COMPLEMENT: {"hp": 10.0, "power": 5.0, "attack_rate": 2.5, "range": 1, "cost": 15, "color": Color8(90, 200, 230), "sprite": "res://art/defenders/complement_idle.png", "attack_sprites": ["res://art/defenders/complement_attack.png"], "attack_fps": 4.0},
 	DefenderType.MAST_CELL: {"hp": 15.0, "power": 0.0, "attack_rate": 0.0, "range": 1, "cost": 30, "color": Color8(235, 130, 170), "aura_slow": 0.20, "sprite": "res://art/defenders/mast_cell_idle.png"},
 	DefenderType.NK_CELL: {"hp": 25.0, "power": 12.0, "attack_rate": 1.0, "range": 1, "cost": 60, "color": Color8(80, 210, 190), "sprite": "res://art/defenders/nk_cell_idle.png", "attack_sprites": ["res://art/defenders/nk_cell_attack_charge.png", "res://art/defenders/nk_cell_attack_burst.png", "res://art/defenders/nk_cell_attack_release.png"]},
 	DefenderType.HELPER_T: {"hp": 20.0, "power": 0.0, "attack_rate": 0.0, "range": 2, "cost": 35, "color": Color8(230, 190, 90), "aura_power_buff": 0.25, "sprite": "res://art/defenders/helper_t_idle.png"},
-	DefenderType.DENDRITIC: {"hp": 15.0, "power": 0.0, "attack_rate": 0.0, "range": 2, "cost": 35, "color": Color8(130, 140, 220), "aura_mark_damage": 0.25},
+	DefenderType.DENDRITIC: {"hp": 15.0, "power": 0.0, "attack_rate": 0.0, "range": 2, "cost": 35, "color": Color8(130, 140, 220), "aura_mark_damage": 0.25, "sprite": "res://art/defenders/dendritic_idle.png"},
+	# The Sunflower-equivalent: hematopoietic stem cells in bone marrow are the
+	# actual biological source of every blood/immune cell, so "this produces
+	# more resources over time" has a real basis, not just a game abstraction.
+	# Cheap relative to attackers (mirrors Sunflower costing half a Peashooter)
+	# to reward early economy investment.
+	DefenderType.STEM_CELL: {"hp": 15.0, "power": 0.0, "attack_rate": 0.0, "range": 0, "cost": 30, "color": Color8(190, 220, 90), "produces_orb_interval": 14.0, "produces_orb_amount": 12},
+	# Not in DEFENDER_ROSTER yet (main.gd) — spec 2.2 stats filled in now so
+	# adding them to the roster later really is "a single line", matching
+	# TYPE_MULTIPLIER/DEFENDER_NAMES/DEFENDER_ABILITIES, which already had
+	# entries for these three. Previously missing here, which meant every
+	# DEFENDER_STATS[type] call site (all unguarded) would have hard-crashed
+	# the instant one of these was added to the roster.
+	DefenderType.EOSINOPHIL: {"hp": 30.0, "power": 10.0, "attack_rate": 0.8, "range": 1, "cost": 40, "color": Color8(200, 210, 100)},
+	DefenderType.B_CELL: {"hp": 15.0, "power": 6.0, "attack_rate": 1.2, "range": 3, "cost": 45, "color": Color8(160, 200, 230)},
+	DefenderType.CYTOTOXIC_T: {"hp": 20.0, "power": 20.0, "attack_rate": 0.9, "range": 2, "cost": 70, "color": Color8(220, 80, 100)},
 }
 
 const ENEMY_STATS := {
 	# Move speeds tuned to a PvZ-like readable crawl rather than the faster
 	# pace from before — the point is you can see a threat coming and have
 	# real time to react, not react to something already halfway down the lane.
-	EnemyType.BACTERIA: {"hp": 32.0, "power": 7.0, "attack_rate": 1.0, "move_speed": 0.22, "contact_damage": 7.0, "color": Color8(140, 190, 60), "sprite": "res://art/enemies/bacteria_idle.png", "attack_sprites": ["res://art/enemies/bacteria_attack_1.png", "res://art/enemies/bacteria_attack_2.png"], "die_sprites": ["res://art/enemies/bacteria_die.png"]},
-	EnemyType.VIRUS: {"hp": 18.0, "power": 8.0, "attack_rate": 1.3, "move_speed": 0.35, "contact_damage": 8.0, "color": Color8(200, 80, 190)},
+	EnemyType.BACTERIA: {"hp": 32.0, "power": 7.0, "attack_rate": 1.0, "move_speed": 0.19, "contact_damage": 7.0, "color": Color8(140, 190, 60), "sprite": "res://art/enemies/bacteria_idle.png", "attack_sprites": ["res://art/enemies/bacteria_attack_1.png", "res://art/enemies/bacteria_attack_2.png"], "die_sprites": ["res://art/enemies/bacteria_die.png"]},
+	EnemyType.VIRUS: {"hp": 18.0, "power": 8.0, "attack_rate": 1.3, "move_speed": 0.3, "contact_damage": 8.0, "color": Color8(200, 80, 190)},
 	# S. aureus — "aureus" is Latin for golden, its colonies really are golden-yellow.
-	# Clumps ("staphylo" = cluster of grapes): spawns 3 at once via spawn_group,
-	# individually weaker than baseline Bacteria so the threat is the burst, not the unit.
-	EnemyType.STAPH: {"hp": 18.0, "power": 4.0, "attack_rate": 1.0, "move_speed": 0.22, "contact_damage": 4.0, "spawn_group": 2, "color": Color8(210, 175, 50), "sprite": "res://art/enemies/staph_idle.png", "attack_sprites": ["res://art/enemies/staph_attack_1.png", "res://art/enemies/staph_attack_2.png"], "die_sprites": ["res://art/enemies/staph_die.png"]},
+	# Clumps ("staphylo" = cluster of grapes): spawns 2 at once via spawn_group
+	# (tuned down from an original 3 during balance passes), individually
+	# weaker than baseline Bacteria so the threat is the burst, not the unit.
+	EnemyType.STAPH: {"hp": 18.0, "power": 4.0, "attack_rate": 1.0, "move_speed": 0.19, "contact_damage": 4.0, "spawn_group": 2, "color": Color8(210, 175, 50), "sprite": "res://art/enemies/staph_idle.png", "attack_sprites": ["res://art/enemies/staph_attack_1.png", "res://art/enemies/staph_attack_2.png"], "die_sprites": ["res://art/enemies/staph_die.png"]},
 	# S. pyogenes — "strepto" = twisted chain; spreads through tissue fast
 	# (cellulitis). Glassy and quick: low HP, high speed, punishes a slow
 	# single-target defender if it's left unengaged near the front. Still the
 	# fast one relative to its lane-mates, just not absurdly so anymore.
-	EnemyType.STREP: {"hp": 16.0, "power": 6.0, "attack_rate": 1.2, "move_speed": 0.4, "contact_damage": 6.0, "color": Color8(205, 90, 80), "sprite": "res://art/enemies/strep_idle.png", "attack_sprites": ["res://art/enemies/strep_attack_1.png", "res://art/enemies/strep_attack_2.png"], "die_sprites": ["res://art/enemies/strep_die.png"]},
+	EnemyType.STREP: {"hp": 16.0, "power": 6.0, "attack_rate": 1.2, "move_speed": 0.34, "contact_damage": 6.0, "color": Color8(205, 90, 80), "sprite": "res://art/enemies/strep_idle.png", "attack_sprites": ["res://art/enemies/strep_attack_1.png", "res://art/enemies/strep_attack_2.png"], "die_sprites": ["res://art/enemies/strep_die.png"]},
 }
 
 # TYPE_MULTIPLIER[defender_type][enemy_type] -> damage multiplier. Missing entry = 1.0.
@@ -63,13 +80,24 @@ const TYPE_MULTIPLIER := {
 const LEVELS := {
 	1: {
 		"name": "Skin — The Wound",
-		# Gentler background trickle than before — pacing now leans on the
-		# periodic synchronized "wave" (see main.gd's BURST_INTERVAL) to create
-		# the PvZ rhythm of calm-then-spike, rather than one continuously
-		# tightening firehose.
-		"duration": 65.0, "base_interval": 3.4, "interval_decay": 0.025, "interval_floor": 1.4,
+		"duration": 170.0,  # informational only for wave-scripted levels — see "waves". Measured actual clear time (bot playthrough): ~2.5-3 min.
 		"starting_rp": 70.0,
 		"weights": {EnemyType.STAPH: 0.5, EnemyType.STREP: 0.5},
+		# The actual PvZ rhythm, stretched to a real early-PvZ-level length
+		# (2-4 min, not a 90-second demo round): a quiet setup period to place
+		# defenders, then a SLOW, gradual density ramp across three trickle
+		# tiers (not one sharp jump) — "increase of bacteria be slow" — a
+		# telegraphed huge wave, a still-gentle middle stretch, then the final
+		# wave. Ends once the final wave is cleared, not on a fixed timer.
+		"waves": [
+			{"t": 10.0, "type": "trickle", "interval": 4.2},
+			{"t": 45.0, "type": "trickle", "interval": 3.4},
+			{"t": 60.0, "type": "warning", "text": "A huge wave is approaching!"},
+			{"t": 64.0, "type": "burst", "per_lane": 2},
+			{"t": 65.0, "type": "trickle", "interval": 3.0},
+			{"t": 130.0, "type": "warning", "text": "Final wave!"},
+			{"t": 135.0, "type": "burst", "per_lane": 3, "final": true},
+		],
 	},
 	2: {
 		"name": "Bloodstream — Local Inflammation",
@@ -90,6 +118,7 @@ const DEFENDER_NAMES := {
 	DefenderType.HELPER_T: "Helper T Cell",
 	DefenderType.CYTOTOXIC_T: "Cytotoxic T Cell",
 	DefenderType.DENDRITIC: "Dendritic Cell",
+	DefenderType.STEM_CELL: "Stem Cell",
 }
 
 const DEFENDER_ABILITIES := {
@@ -103,6 +132,7 @@ const DEFENDER_ABILITIES := {
 	DefenderType.HELPER_T: "Support aura: +25% power to one adjacent defender. Deals no direct damage.",
 	DefenderType.CYTOTOXIC_T: "High single-target damage vs. infected cells.",
 	DefenderType.DENDRITIC: "Support aura: enemies in range take +25% damage from all sources.",
+	DefenderType.STEM_CELL: "Deals no damage. Periodically produces a bonus RP orb nearby — your main economy investment.",
 }
 
 
@@ -115,6 +145,7 @@ const FIELD_NOTES := {
 	DefenderType.NK_CELL: "Natural Killer cells can destroy infected or abnormal cells without ever having seen that threat before — no prior exposure needed.",
 	DefenderType.HELPER_T: "Helper T cells don't kill anything directly — they coordinate everyone else. Losing too many (as in advanced HIV) leaves the body unable to fight almost anything.",
 	DefenderType.DENDRITIC: "Dendritic cells capture pathogen fragments and present them to T cells — the actual bridge between your fast \"innate\" defenses and your slower, smarter \"adaptive\" immune system.",
+	DefenderType.STEM_CELL: "Hematopoietic stem cells in bone marrow are the actual biological source of every blood and immune cell your body makes.",
 }
 
 const ENEMY_NAMES := {
@@ -126,6 +157,18 @@ const ENEMY_NAMES := {
 	EnemyType.STAPH: "Staph Cluster",
 	EnemyType.STREP: "Strep Runner",
 }
+
+
+## Single canonical definition of "has any aura" for a raw DEFENDER_STATS
+## dict (used where no Defender instance exists yet, e.g. the hover preview
+## for a currently-selected type). Defender.has_aura() is the equivalent for
+## an already-placed instance — kept separate since they operate on different
+## representations, but each is defined exactly once now instead of being
+## copy-pasted inline at every call site.
+func defender_stats_has_aura(stats: Dictionary) -> bool:
+	return stats.get("aura_slow", 0.0) > 0.0 \
+		or stats.get("aura_power_buff", 0.0) > 0.0 \
+		or stats.get("aura_mark_damage", 0.0) > 0.0
 
 
 func defender_tooltip(t: int) -> String:

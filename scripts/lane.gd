@@ -16,6 +16,7 @@ signal body_health_lost(amount: float)
 signal defender_lost()
 signal damage_dealt(amount: float, overkill: float)  # for the Level Efficiency Rating (spec 2.9)
 signal kill_scored(defender_type: int, enemy_type: int)  # for Memory Cells (spec 2.9)
+signal resource_produced(defender: Defender)  # Stem Cell: periodically produces a bonus RP orb
 
 @export var slot_count: int = 6
 @export var slot_spacing: float = 140.0
@@ -50,7 +51,10 @@ func _ready() -> void:
 	for i in range(slot_count):
 		slots[i] = null
 	_build_curve()
-	core.position = slot_to_screen(-0.5)  # sits just behind slot 0, still on-screen, no overlap with a placed defender
+	# -0.7 slot-units back from slot 0, not -0.5 — the Core (radius 30) plus a
+	# placed defender's sprite (radius 42) need more clearance than half a
+	# slot gives at the current spacing, or they visibly overlap.
+	core.position = slot_to_screen(-0.7)
 
 
 func _build_curve() -> void:
@@ -194,7 +198,7 @@ func place_defender(index: int, type: int) -> Defender:
 	d.lane = self
 	d.slot_index = index
 	d.position = slot_to_screen(index)
-	if d.aura_slow > 0.0 or d.aura_power_buff > 0.0 or d.aura_mark_damage > 0.0:
+	if d.has_aura():
 		d.set_aura_radius(d.range_slots * slot_spacing)
 	slots[index] = d
 	return d
@@ -229,9 +233,21 @@ func on_enemy_killed(e: Enemy) -> void:
 
 func _process(delta: float) -> void:
 	_apply_auras()
+	_update_resource_production(delta)
 	_update_movement(delta)
 	_update_defender_attacks(delta)
 	_update_enemy_attacks(delta)
+
+
+func _update_resource_production(delta: float) -> void:
+	for i in range(slot_count):
+		var d: Defender = slots[i]
+		if d == null or d.produces_orb_interval <= 0.0:
+			continue
+		d.production_cooldown -= delta
+		if d.production_cooldown <= 0.0:
+			d.production_cooldown = d.produces_orb_interval
+			resource_produced.emit(d)
 
 
 func _apply_auras() -> void:
@@ -265,15 +281,26 @@ func _apply_auras() -> void:
 			slots[i].power = slots[i].base_power * slots[i].power_multiplier
 
 
-func _apply_mast_cell_slow(d: Defender, slot_i: int) -> void:
-	var hit_any: bool = false
+## Enemies within `range_slots` of `slot_i` on EITHER side — auras are drawn
+## as a full circle (AuraRing), so they must actually affect the full circle,
+## not just the "ahead" half-range that attack targeting uses. Excludes
+## enemies mid-death-animation (_dying): they're already resolved, just
+## still on screen finishing their sprite.
+func _enemies_in_range(slot_i: int, range_slots: int) -> Array:
+	var result: Array = []
 	for e in enemies:
-		if not is_instance_valid(e):
+		if not is_instance_valid(e) or e._dying:
 			continue
-		if e.position_units >= slot_i and e.position_units <= slot_i + d.range_slots:
-			e.slow_multiplier *= (1.0 - d.aura_slow)
-			hit_any = true
-	d.set_aura_active(hit_any)
+		if e.position_units >= slot_i - range_slots and e.position_units <= slot_i + range_slots:
+			result.append(e)
+	return result
+
+
+func _apply_mast_cell_slow(d: Defender, slot_i: int) -> void:
+	var affected: Array = _enemies_in_range(slot_i, d.range_slots)
+	for e in affected:
+		e.slow_multiplier *= (1.0 - d.aura_slow)
+	d.set_aura_active(not affected.is_empty())
 
 
 func _apply_helper_t_buff(d: Defender, slot_i: int) -> void:
@@ -287,15 +314,11 @@ func _apply_helper_t_buff(d: Defender, slot_i: int) -> void:
 
 
 func _apply_dendritic_mark(d: Defender, slot_i: int) -> void:
-	var hit_any: bool = false
-	for e in enemies:
-		if not is_instance_valid(e):
-			continue
-		if e.position_units >= slot_i and e.position_units <= slot_i + d.range_slots:
-			e.mark_multiplier = max(e.mark_multiplier, 1.0 + d.aura_mark_damage)
-			e.set_marked(true)
-			hit_any = true
-	d.set_aura_active(hit_any)
+	var affected: Array = _enemies_in_range(slot_i, d.range_slots)
+	for e in affected:
+		e.mark_multiplier = max(e.mark_multiplier, 1.0 + d.aura_mark_damage)
+		e.set_marked(true)
+	d.set_aura_active(not affected.is_empty())
 
 
 func _find_nearest_defender(from_index: int, max_range: int, exclude: Defender) -> Defender:
@@ -308,7 +331,7 @@ func _find_nearest_defender(from_index: int, max_range: int, exclude: Defender) 
 
 func _update_movement(delta: float) -> void:
 	for e in enemies.duplicate():
-		if not is_instance_valid(e) or e.state != Enemy.State.MOVING:
+		if not is_instance_valid(e) or e._dying or e.state != Enemy.State.MOVING:
 			continue
 		var blocking_index: int = clampi(int(floor(e.position_units)), 0, slot_count - 1)
 		var blocker: Defender = slots[blocking_index]
@@ -357,7 +380,7 @@ func _update_defender_attacks(delta: float) -> void:
 
 func _update_enemy_attacks(delta: float) -> void:
 	for e in enemies.duplicate():
-		if not is_instance_valid(e):
+		if not is_instance_valid(e) or e._dying:
 			continue
 		if e.state == Enemy.State.ENGAGED and e.engaged_defender != null and is_instance_valid(e.engaged_defender):
 			e.cooldown -= delta
@@ -371,7 +394,7 @@ func _update_enemy_attacks(delta: float) -> void:
 func _find_target_for_defender(d: Defender, slot_i: int) -> Enemy:
 	var best: Enemy = null
 	for e in enemies:
-		if not is_instance_valid(e):
+		if not is_instance_valid(e) or e._dying:
 			continue
 		if e.position_units >= slot_i and e.position_units <= slot_i + d.range_slots:
 			if best == null or e.position_units < best.position_units:

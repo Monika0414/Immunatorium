@@ -20,7 +20,7 @@ extends Node2D
 @onready var game_over_subtitle: Label = $GameOverLayer/Panel/SubtitleLabel
 @onready var retry_button: Button = $GameOverLayer/Panel/RetryButton
 @onready var preview_aura_ring: AuraRing = $PreviewAuraRing
-@onready var defender_bar: HBoxContainer = $UI/DefenderBar
+@onready var defender_bar: VBoxContainer = $UI/DefenderBar
 
 var rp: float = 50.0
 var rp_cap: float = 150.0
@@ -30,6 +30,8 @@ const ORB_SCENE: PackedScene = preload("res://scenes/ResourceOrb.tscn")
 const ORB_INTERVAL: float = 8.0
 var time_since_orb: float = 0.0
 var active_orbs: Array = []
+
+var defender_cards: Array = []  # [{"btn": Button, "cost": int}, ...] — built once in _build_defender_bar()
 
 # One entry per recruitable defender. Level 1's whole roster; adding a new
 # one later is a single line here (no new Main.tscn node needed — the icon
@@ -42,6 +44,7 @@ const DEFENDER_ROSTER: Array = [
 	GameData.DefenderType.NK_CELL,
 	GameData.DefenderType.HELPER_T,
 	GameData.DefenderType.DENDRITIC,
+	GameData.DefenderType.STEM_CELL,
 ]
 
 var body_health: float = 100.0
@@ -56,8 +59,16 @@ var level_elapsed: float = 0.0
 var time_since_spawn: float = 0.0
 var game_over: bool = false
 
-const BURST_INTERVAL: float = 18.0  # synchronized "wave": one enemy per lane at once, on top of the trickle
-const WAVE_WARNING_LEAD: float = 2.5  # seconds of "a wave is approaching!" before the burst actually lands
+## --- Wave-scripted levels (level_config.has("waves"), see GameData.LEVELS) ---
+var wave_index: int = 0
+var trickle_active: bool = false
+var trickle_interval: float = 3.6
+var time_since_trickle: float = 0.0
+var final_wave_fired: bool = false
+
+## --- Fallback for levels without a "waves" schedule (e.g. Level 2 for now) ---
+const BURST_INTERVAL: float = 18.0
+const WAVE_WARNING_LEAD: float = 2.5
 var time_since_burst: float = 0.0
 var wave_warning_shown: bool = false
 
@@ -76,6 +87,7 @@ func _ready() -> void:
 		l.defender_lost.connect(_on_defender_lost)
 		l.damage_dealt.connect(_on_damage_dealt)
 		l.kill_scored.connect(_on_kill_scored)
+		l.resource_produced.connect(_on_resource_produced)
 	health_bar.max_value = max_body_health
 	health_bar.value = body_health
 
@@ -99,7 +111,10 @@ func _build_defender_bar() -> void:
 	for type in DEFENDER_ROSTER:
 		var stats: Dictionary = GameData.DEFENDER_STATS[type]
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(88, 88)
+		# Width 0 = let the VBoxContainer stretch it to fill the sidebar;
+		# height fixed so the card reads as a square icon, not a name-plate.
+		btn.custom_minimum_size = Vector2(0, 64)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.tooltip_text = GameData.defender_tooltip(type)
 		btn.pressed.connect(_select_type.bind(type))
 
@@ -113,20 +128,23 @@ func _build_defender_bar() -> void:
 			icon_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-			icon_rect.offset_left = 6
-			icon_rect.offset_top = 6
-			icon_rect.offset_right = -6
-			icon_rect.offset_bottom = -18
+			icon_rect.offset_left = 2
+			icon_rect.offset_top = 2
+			icon_rect.offset_right = -2
+			icon_rect.offset_bottom = -2
 			icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			btn.add_child(icon_rect)
 		else:
+			# No art yet for this type — the icon itself becomes the colored
+			# swatch with its short name, so it still reads as "one icon" and
+			# not a leftover name-plate layout.
 			var swatch := ColorRect.new()
 			swatch.color = stats.color
 			swatch.set_anchors_preset(Control.PRESET_FULL_RECT)
-			swatch.offset_left = 6
-			swatch.offset_top = 6
-			swatch.offset_right = -6
-			swatch.offset_bottom = -18
+			swatch.offset_left = 2
+			swatch.offset_top = 2
+			swatch.offset_right = -2
+			swatch.offset_bottom = -2
 			swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			btn.add_child(swatch)
 			var name_label := Label.new()
@@ -135,27 +153,48 @@ func _build_defender_bar() -> void:
 			name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			name_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-			name_label.offset_bottom = -18
 			name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			btn.add_child(name_label)
 
+		# RP cost badge: a small tag pinned to the icon's bottom-right corner
+		# (PvZ seed-packet style), not a full-width strip eating into the icon.
 		var badge_bg := ColorRect.new()
-		badge_bg.color = Color(0, 0, 0, 0.55)
-		badge_bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-		badge_bg.offset_top = -18
+		badge_bg.color = Color(0, 0, 0, 0.65)
+		badge_bg.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		badge_bg.offset_left = -24
+		badge_bg.offset_top = -16
+		badge_bg.offset_right = -1
+		badge_bg.offset_bottom = -1
 		badge_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		btn.add_child(badge_bg)
 		var badge := Label.new()
 		badge.text = str(int(stats.cost))
-		badge.add_theme_font_size_override("font_size", 13)
+		badge.add_theme_font_size_override("font_size", 11)
 		badge.add_theme_color_override("font_color", Color.WHITE)
 		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		badge.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-		badge.offset_top = -18
+		badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		badge.offset_left = -24
+		badge.offset_top = -16
+		badge.offset_right = -1
+		badge.offset_bottom = -1
 		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		btn.add_child(badge)
 
 		defender_bar.add_child(btn)
+		defender_cards.append({"btn": btn, "cost": int(stats.cost)})
+
+	_refresh_defender_bar_affordability()
+
+
+## PvZ-style: a seed packet you can't afford grays out and stops accepting
+## clicks entirely (not just a click that bounces with an error message).
+## Called every time RP changes so it's always current.
+func _refresh_defender_bar_affordability() -> void:
+	for entry in defender_cards:
+		var affordable: bool = rp >= entry.cost
+		entry.btn.disabled = not affordable
+		entry.btn.modulate = Color.WHITE if affordable else Color(0.42, 0.42, 0.42)
 
 
 func _on_start_pressed() -> void:
@@ -172,6 +211,11 @@ func _load_level(level_id: int) -> void:
 	level_elapsed = 0.0
 	time_since_spawn = 0.0
 	time_since_burst = 0.0
+	wave_warning_shown = false
+	wave_index = 0
+	trickle_active = false
+	time_since_trickle = 0.0
+	final_wave_fired = false
 	game_over = false
 	status_label.text = ""
 	field_note_label.visible = false
@@ -256,10 +300,7 @@ func _on_slot_hover(l: Lane, i: int, btn: Button, hover_styles: Dictionary) -> v
 	# Preview an aura defender's actual coverage before spending RP on it —
 	# shown for any open slot regardless of affordability, since seeing the
 	# shape doesn't require being able to place it right now.
-	var has_aura: bool = stats.get("aura_slow", 0.0) > 0.0 \
-		or stats.get("aura_power_buff", 0.0) > 0.0 \
-		or stats.get("aura_mark_damage", 0.0) > 0.0
-	if has_aura and l.can_place(i):
+	if GameData.defender_stats_has_aura(stats) and l.can_place(i):
 		preview_aura_ring.position = l.slot_to_screen(i)
 		preview_aura_ring.radius = stats.range * l.slot_spacing
 		preview_aura_ring.base_color = stats.color
@@ -330,6 +371,59 @@ func _process(delta: float) -> void:
 		_spawn_resource_orb()
 
 	level_elapsed += delta
+	if level_config.has("waves"):
+		_update_wave_schedule(delta)
+	else:
+		_update_continuous_spawner(delta)
+
+	if body_health <= 0:
+		_end_game(false)
+	elif level_config.has("waves"):
+		if final_wave_fired and _all_lanes_clear():
+			_end_game(true)
+	elif level_elapsed >= level_config.duration and _all_lanes_clear():
+		_end_game(true)
+
+
+## PvZ-style scripted pacing (see GameData.LEVELS[1].waves for the actual
+## schedule): a quiet setup period, a light trickle, a telegraphed huge wave
+## hitting every lane at once, a denser breather, then the final wave — the
+## level ends once that last wave is fully cleared, not on a fixed timer.
+func _update_wave_schedule(delta: float) -> void:
+	var waves: Array = level_config.waves
+	while wave_index < waves.size() and level_elapsed >= waves[wave_index].t:
+		_fire_wave_event(waves[wave_index])
+		wave_index += 1
+
+	if trickle_active:
+		time_since_trickle += delta
+		if time_since_trickle >= trickle_interval:
+			time_since_trickle = 0.0
+			var target_lane: Lane = lanes[randi() % lanes.size()]
+			_spawn_into(target_lane, GameData.weighted_random_enemy(level_config.weights))
+
+
+func _fire_wave_event(event: Dictionary) -> void:
+	match event.type:
+		"trickle":
+			trickle_active = true
+			trickle_interval = event.interval
+			time_since_trickle = 0.0
+		"warning":
+			status_label.text = event.text
+		"burst":
+			trickle_active = false  # a later "trickle" event (if scripted) resumes it
+			status_label.text = ""
+			for l in lanes:
+				for i in range(int(event.per_lane)):
+					_spawn_into(l, GameData.weighted_random_enemy(level_config.weights))
+			if event.get("final", false):
+				final_wave_fired = true
+
+
+## Old continuous decay-and-burst model — kept for any level without a
+## "waves" schedule (currently Level 2, not yet exposed in the UI).
+func _update_continuous_spawner(delta: float) -> void:
 	var interval: float = max(
 		level_config.interval_floor,
 		level_config.base_interval - level_config.interval_decay * level_elapsed
@@ -351,11 +445,6 @@ func _process(delta: float) -> void:
 		for l in lanes:
 			_spawn_into(l, GameData.weighted_random_enemy(level_config.weights))
 
-	if body_health <= 0:
-		_end_game(false)
-	elif level_elapsed >= level_config.duration and _all_lanes_clear():
-		_end_game(true)
-
 
 const CLUMP_CHANCE: float = 0.15  # rare chance a group spawns nearly on top of itself instead of staggered
 
@@ -372,19 +461,42 @@ func _spawn_into(l: Lane, enemy_type: int) -> void:
 		l.spawn_enemy(enemy_type, i * stagger)
 
 
+const AMBIENT_ORB_AMOUNT: int = 15  # matches ResourceOrb's own default; named here since ambient orbs are spawned via _spawn_orb, which requires an explicit amount
+
 func _spawn_resource_orb() -> void:
+	var lane_index: int = randi() % lanes.size()
+	_spawn_orb(Vector2(randf_range(160.0, 900.0), 0.0), lanes[lane_index].lane_y, AMBIENT_ORB_AMOUNT)
+
+
+func _on_resource_produced(d: Defender) -> void:
+	# Stem Cell: the orb pops up right next to the cell instead of falling
+	# from the top — it's produced locally, not ambient — with a small random
+	# offset so several Stem Cells' orbs don't perfectly overlap.
+	var offset := Vector2(randf_range(-24.0, 24.0), randf_range(-14.0, 14.0))
+	var spawn_pos: Vector2 = d.global_position + offset
+	_spawn_orb(spawn_pos, spawn_pos.y, d.produces_orb_amount)
+
+
+func _spawn_orb(start_pos: Vector2, fall_target_y: float, amount: int) -> void:
 	var orb: ResourceOrb = ORB_SCENE.instantiate()
 	add_child(orb)
-	var lane_index: int = randi() % lanes.size()
-	orb.position = Vector2(randf_range(160.0, 900.0), 0.0)
-	orb.fall_target_y = lanes[lane_index].lane_y
+	orb.position = start_pos
+	orb.fall_target_y = fall_target_y
+	orb.amount = amount
 	orb.collected.connect(_on_orb_collected.bind(orb))
+	orb.expired.connect(_on_orb_expired.bind(orb))
 	active_orbs.append(orb)
 
 
 func _on_orb_collected(amount: int, orb: ResourceOrb) -> void:
 	rp = min(rp_cap, rp + amount)
 	_update_rp_label()
+	active_orbs.erase(orb)
+
+
+func _on_orb_expired(orb: ResourceOrb) -> void:
+	# An uncollected orb frees itself without ever emitting `collected` — this
+	# is what keeps active_orbs from accumulating dangling references to it.
 	active_orbs.erase(orb)
 
 
@@ -421,13 +533,20 @@ func _on_kill_scored(defender_type: int, enemy_type: int) -> void:
 func _show_field_note(text: String) -> void:
 	if text.is_empty():
 		return
-	field_note_label.text = "Field Note: " + text
+	var full_text: String = "Field Note: " + text
+	field_note_label.text = full_text
 	field_note_label.visible = true
-	get_tree().create_timer(6.0).timeout.connect(func(): field_note_label.visible = false)
+	# Guarded like _flash_status: without this, a timer armed by one note
+	# could hide a *different*, newer note shown after a quick level restart.
+	get_tree().create_timer(6.0).timeout.connect(func():
+		if field_note_label.text == full_text:
+			field_note_label.visible = false
+	)
 
 
 func _update_rp_label() -> void:
 	rp_label.text = "RP: %d / %d" % [int(rp), int(rp_cap)]
+	_refresh_defender_bar_affordability()
 
 
 func _compute_efficiency_grade() -> Dictionary:
