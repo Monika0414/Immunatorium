@@ -29,7 +29,7 @@ extends Node2D
 
 var rp: float = 50.0
 var rp_cap: float = 150.0
-var rp_regen: float = 1.5  # small trickle/safety net — orbs (see below) are the main income now
+var rp_regen: float = 0.5  # small trickle/safety net — orbs (see below) are the main income now; was 1.5, cut further since it was climbing on its own too fast even with no orbs collected
 
 const ORB_SCENE: PackedScene = preload("res://scenes/ResourceOrb.tscn")
 const ORB_INTERVAL: float = 8.0
