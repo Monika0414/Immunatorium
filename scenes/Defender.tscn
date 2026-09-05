@@ -1,0 +1,30 @@
+[gd_scene format=3 uid="uid://dq0defender01"]
+
+[ext_resource type="Script" path="res://scripts/defender.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/circle_shape.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/aura_ring.gd" id="3"]
+
+[node name="Defender" type="Node2D"]
+script = ExtResource("1")
+
+[node name="AuraRing" type="Node2D" parent="."]
+script = ExtResource("3")
+visible = false
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Body" type="Node2D" parent="Visual"]
+script = ExtResource("2")
+radius = 36.0
+color = Color(1, 1, 1, 1)
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Visual"]
+visible = false
+
+[node name="HPLabel" type="Label" parent="."]
+offset_left = -50.0
+offset_top = 44.0
+offset_right = 50.0
+offset_bottom = 78.0
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1

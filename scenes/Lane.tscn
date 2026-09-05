@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://dq0lane00001"]
+
+[ext_resource type="Script" path="res://scripts/lane.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/circle_shape.gd" id="2"]
+
+[node name="Lane" type="Node2D"]
+script = ExtResource("1")
+slot_count = 6
+slot_spacing = 140.0
+slot_origin_x = 120.0
+lane_y = 300.0
+
+[node name="VesselOutline" type="Line2D" parent="."]
+width = 104.0
+default_color = Color(0.4, 0.1, 0.13, 1)
+joint_mode = 2
+begin_cap_mode = 2
+end_cap_mode = 2
+antialiased = true
+
+[node name="VesselFill" type="Line2D" parent="."]
+width = 86.0
+default_color = Color(0.68, 0.24, 0.26, 0.92)
+joint_mode = 2
+begin_cap_mode = 2
+end_cap_mode = 2
+antialiased = true
+
+[node name="VesselLiningTop" type="Line2D" parent="."]
+width = 3.0
+default_color = Color(0, 0, 0, 0.45)
+joint_mode = 2
+antialiased = true
+
+[node name="VesselLiningBottom" type="Line2D" parent="."]
+width = 3.0
+default_color = Color(0, 0, 0, 0.45)
+joint_mode = 2
+antialiased = true
+
+[node name="Core" type="Node2D" parent="."]
+
+[node name="Body" type="Node2D" parent="Core"]
+script = ExtResource("2")
+radius = 50.0
+color = Color(0.75, 0.15, 0.2, 1)
+outline_color = Color(1, 0.85, 0.85, 0.6)
+outline_width = 3.0
+
+[node name="Label" type="Label" parent="Core"]
+offset_left = -60.0
+offset_top = -12.0
+offset_right = 60.0
+offset_bottom = 12.0
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+text = "CORE"
