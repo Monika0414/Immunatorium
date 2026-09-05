@@ -52,23 +52,31 @@ func _draw_play() -> void:
 
 
 func _draw_restart() -> void:
-	# A ~300-degree arc plus an arrowhead at its leading end reads as a single
-	# unambiguous "restart/refresh" glyph without needing any image asset.
+	# A ~290-degree arc (gap at the upper-left) plus an arrowhead at its
+	# leading end reads as a standard clockwise "refresh/restart" glyph.
+	# Angles: 0=right, 90=down, 180=left, -90=up (Godot's y-down convention),
+	# so sweeping start=-90 -> end=205 (increasing angle) draws a clockwise
+	# arc from the top, around through the right and bottom, ending up on
+	# the upper-left — near the top of the gap rather than down at the
+	# midline, which is what kept making the arrowhead read as too low.
 	var center: Vector2 = size * 0.5
 	var radius: float = min(size.x, size.y) * 0.32
 	var stroke: float = size.x * 0.1
-	var start_angle: float = deg_to_rad(-60.0)
-	var end_angle: float = deg_to_rad(220.0)
+	var start_angle: float = deg_to_rad(-90.0)
+	var end_angle: float = deg_to_rad(205.0)
 	draw_arc(center, radius, start_angle, end_angle, 24, glyph_color, stroke, true)
 
 	# Tangent direction at end_angle is the derivative of (cos, sin)*radius
 	# w.r.t. angle — this points "forward" along the arc's sweep direction, so
 	# the arrowhead visually continues the arc instead of pointing backward.
+	# The head is centered ON the tip (half ahead, half behind) rather than
+	# trailing fully behind it, so it hugs the arc instead of sagging below it.
 	var tip: Vector2 = center + Vector2(cos(end_angle), sin(end_angle)) * radius
 	var travel_dir: Vector2 = Vector2(-sin(end_angle), cos(end_angle))
 	var perp: Vector2 = Vector2(-travel_dir.y, travel_dir.x)
-	var head_len: float = size.x * 0.22
-	var head_half_width: float = size.x * 0.16
+	var head_len: float = size.x * 0.16
+	var head_half_width: float = size.x * 0.14
+	tip += travel_dir * head_len * 0.5
 	var back_center: Vector2 = tip - travel_dir * head_len
 	var pts := PackedVector2Array([
 		tip,

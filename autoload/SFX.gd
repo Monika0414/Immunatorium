@@ -7,6 +7,12 @@ extends Node
 const POOL_SIZE: int = 8
 const MIX_RATE: int = 22050
 
+# The real audio assets in the project (everything else here is synthesized)
+# — a punchy impact clip for defender/enemy melee contact, and a heavier
+# "monster attack" clip for an enemy actually breaching the core.
+const HIT_IMPACT_SFX: AudioStream = preload("res://audio/hit_impact.mp3")
+const CORE_HIT_SFX: AudioStream = preload("res://audio/core_hit.mp3")
+
 var _players: Array[AudioStreamPlayer] = []
 var _next_player: int = 0
 var _cache: Dictionary = {}
@@ -36,7 +42,7 @@ func play_place() -> void:
 
 
 func play_hit() -> void:
-	_play(_cached("hit", func(): return _sweep(700.0, 500.0, 0.045, "square")), -10.0)
+	_play(HIT_IMPACT_SFX, -8.0)
 
 
 func play_kill() -> void:
@@ -44,7 +50,7 @@ func play_kill() -> void:
 
 
 func play_leak() -> void:
-	_play(_cached("leak", func(): return _sweep(180.0, 120.0, 0.22, "square")), -3.0)
+	_play(CORE_HIT_SFX, -3.0)
 
 
 func play_invalid() -> void:
@@ -59,7 +65,7 @@ func play_lose() -> void:
 	_play(_cached("lose", func(): return _arpeggio([300.0, 220.0, 160.0], 0.6, "square")), -2.0)
 
 
-func _play(stream: AudioStreamWAV, volume_db: float) -> void:
+func _play(stream: AudioStream, volume_db: float) -> void:
 	var p: AudioStreamPlayer = _players[_next_player]
 	_next_player = (_next_player + 1) % _players.size()
 	p.stream = stream

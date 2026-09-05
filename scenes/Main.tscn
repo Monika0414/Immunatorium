@@ -76,10 +76,13 @@ text = "Selected: Neutrophil (25 RP)"
 
 [node name="StatusLabel" type="Label" parent="UI"]
 offset_left = 450.0
-offset_top = 20.0
-offset_right = 800.0
-offset_bottom = 50.0
-theme_override_font_sizes/font_size = 24
+offset_top = 18.0
+offset_right = 795.0
+offset_bottom = 68.0
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 3
+horizontal_alignment = 1
+vertical_alignment = 1
 text = ""
 
 [node name="FieldNoteLabel" type="RichTextLabel" parent="UI"]
