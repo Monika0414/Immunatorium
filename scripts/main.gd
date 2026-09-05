@@ -1,12 +1,12 @@
 extends Node2D
-## Level 1 playable slice: 3 parallel lanes (spec's "vessels/tissue channels",
-## spawner picks randomLane() per 2.8), data-driven LevelConfig spawner
-## (spec 2.1/2.8), RP economy, click-to-place. UI is placeholder Controls,
-## not final layout. GameData.LEVELS already has a Level 2 entry (Virus mix)
-## for when we're ready to build that out — just not exposed in UI right now
-## since we're focused on Level 1.
+## Level 1 playable slice, PvZ-flavored: 5 straight lanes, data-driven
+## LevelConfig spawner (spec 2.1/2.8) with a calm trickle + periodic
+## telegraphed "wave" burst, RP economy driven mainly by clicking falling
+## ResourceOrbs (a small passive trickle is just a safety net), icon-based
+## defender selection. GameData.LEVELS already has a Level 2 entry (Virus
+## mix) for when we're ready to build that out — just not exposed in UI yet.
 
-@onready var lanes: Array[Lane] = [$Lane1, $Lane2, $Lane3]
+@onready var lanes: Array[Lane] = [$Lane1, $Lane2, $Lane3, $Lane4, $Lane5]
 @onready var rp_label: Label = $UI/RPLabel
 @onready var health_bar: ProgressBar = $UI/HealthBar
 @onready var status_label: Label = $UI/StatusLabel
@@ -20,10 +20,29 @@ extends Node2D
 @onready var game_over_subtitle: Label = $GameOverLayer/Panel/SubtitleLabel
 @onready var retry_button: Button = $GameOverLayer/Panel/RetryButton
 @onready var preview_aura_ring: AuraRing = $PreviewAuraRing
+@onready var defender_bar: HBoxContainer = $UI/DefenderBar
 
 var rp: float = 50.0
 var rp_cap: float = 150.0
-var rp_regen: float = 5.0
+var rp_regen: float = 1.5  # small trickle/safety net — orbs (see below) are the main income now
+
+const ORB_SCENE: PackedScene = preload("res://scenes/ResourceOrb.tscn")
+const ORB_INTERVAL: float = 8.0
+var time_since_orb: float = 0.0
+var active_orbs: Array = []
+
+# One entry per recruitable defender. Level 1's whole roster; adding a new
+# one later is a single line here (no new Main.tscn node needed — the icon
+# button is built at runtime in _build_defender_bar()).
+const DEFENDER_ROSTER: Array = [
+	GameData.DefenderType.NEUTROPHIL,
+	GameData.DefenderType.MACROPHAGE,
+	GameData.DefenderType.COMPLEMENT,
+	GameData.DefenderType.MAST_CELL,
+	GameData.DefenderType.NK_CELL,
+	GameData.DefenderType.HELPER_T,
+	GameData.DefenderType.DENDRITIC,
+]
 
 var body_health: float = 100.0
 var max_body_health: float = 100.0
@@ -37,8 +56,10 @@ var level_elapsed: float = 0.0
 var time_since_spawn: float = 0.0
 var game_over: bool = false
 
-const BURST_INTERVAL: float = 15.0  # synchronized wave: one enemy per lane at once, on top of the trickle
+const BURST_INTERVAL: float = 18.0  # synchronized "wave": one enemy per lane at once, on top of the trickle
+const WAVE_WARNING_LEAD: float = 2.5  # seconds of "a wave is approaching!" before the burst actually lands
 var time_since_burst: float = 0.0
+var wave_warning_shown: bool = false
 
 var slot_buttons: Array = []
 
@@ -58,22 +79,7 @@ func _ready() -> void:
 	health_bar.max_value = max_body_health
 	health_bar.value = body_health
 
-	# One entry per recruitable defender — adding a new one later is a single
-	# line here (plus its button node in Main.tscn), not five scattered edits.
-	var defender_buttons: Array = [
-		[$UI/NeutrophilButton, GameData.DefenderType.NEUTROPHIL],
-		[$UI/MacrophageButton, GameData.DefenderType.MACROPHAGE],
-		[$UI/ComplementButton, GameData.DefenderType.COMPLEMENT],
-		[$UI/MastCellButton, GameData.DefenderType.MAST_CELL],
-		[$UI/NKCellButton, GameData.DefenderType.NK_CELL],
-		[$UI/HelperTButton, GameData.DefenderType.HELPER_T],
-		[$UI/DendriticButton, GameData.DefenderType.DENDRITIC],
-	]
-	for entry in defender_buttons:
-		var btn: Button = entry[0]
-		var type: int = entry[1]
-		btn.pressed.connect(_select_type.bind(type))
-		btn.tooltip_text = GameData.defender_tooltip(type)
+	_build_defender_bar()
 
 	$UI/Level1Button.pressed.connect(_load_level.bind(1))
 	retry_button.pressed.connect(_load_level.bind(1))
@@ -82,6 +88,74 @@ func _ready() -> void:
 	_create_slot_buttons()
 	game_over = true  # paused behind the intro popup until Start is pressed
 	intro_layer.visible = true
+
+
+func _build_defender_bar() -> void:
+	# PvZ-style "seed packet": icon + cost badge, no name text — the tooltip
+	# still carries full stats/ability text for anyone who hovers. Built at
+	# runtime from GameData so a defender without art yet still gets a
+	# consistent-looking packet (colored swatch + short name) instead of a
+	# missing/blank button.
+	for type in DEFENDER_ROSTER:
+		var stats: Dictionary = GameData.DEFENDER_STATS[type]
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(88, 88)
+		btn.tooltip_text = GameData.defender_tooltip(type)
+		btn.pressed.connect(_select_type.bind(type))
+
+		if stats.has("sprite"):
+			var icon_rect := TextureRect.new()
+			icon_rect.texture = load(stats.sprite)
+			# expand_mode defaults to EXPAND_KEEP_SIZE (draw at native texture
+			# size, ignoring the assigned rect) — stretch_mode alone does
+			# nothing without this; that combination is what actually scales
+			# a ~1250px source image down to fit an 88px icon.
+			icon_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+			icon_rect.offset_left = 6
+			icon_rect.offset_top = 6
+			icon_rect.offset_right = -6
+			icon_rect.offset_bottom = -18
+			icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			btn.add_child(icon_rect)
+		else:
+			var swatch := ColorRect.new()
+			swatch.color = stats.color
+			swatch.set_anchors_preset(Control.PRESET_FULL_RECT)
+			swatch.offset_left = 6
+			swatch.offset_top = 6
+			swatch.offset_right = -6
+			swatch.offset_bottom = -18
+			swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			btn.add_child(swatch)
+			var name_label := Label.new()
+			name_label.text = GameData.defender_name(type)
+			name_label.add_theme_font_size_override("font_size", 10)
+			name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			name_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+			name_label.offset_bottom = -18
+			name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			btn.add_child(name_label)
+
+		var badge_bg := ColorRect.new()
+		badge_bg.color = Color(0, 0, 0, 0.55)
+		badge_bg.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		badge_bg.offset_top = -18
+		badge_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(badge_bg)
+		var badge := Label.new()
+		badge.text = str(int(stats.cost))
+		badge.add_theme_font_size_override("font_size", 13)
+		badge.add_theme_color_override("font_color", Color.WHITE)
+		badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		badge.offset_top = -18
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		btn.add_child(badge)
+
+		defender_bar.add_child(btn)
 
 
 func _on_start_pressed() -> void:
@@ -113,42 +187,58 @@ func _load_level(level_id: int) -> void:
 	for l in lanes:
 		l.reset()
 
+	for orb in active_orbs.duplicate():
+		if is_instance_valid(orb):
+			orb.queue_free()
+	active_orbs.clear()
+	time_since_orb = 0.0
+	wave_warning_shown = false
+
 	_update_rp_label()
 	_update_selected_label()
 
 
 func _create_slot_buttons() -> void:
-	# Invisible hit-area, no text/border — a soft ring shows on hover instead,
-	# honestly previewing the outcome of a click before it happens: bright
-	# white = placeable, dim red = blocked (occupied, or can't afford the
-	# currently selected type), rather than only reacting after the fact.
-	var empty_style := StyleBoxEmpty.new()
+	# PvZ-style lawn grid: every open slot shows a dim persistent ring at rest
+	# (not just on hover) so the placement grid is always legible, brightening
+	# further on hover to honestly preview the outcome of a click before it
+	# happens — white = placeable, red = blocked (occupied, or can't afford it).
+	var idle_style := StyleBoxFlat.new()
+	idle_style.bg_color = Color(1, 1, 1, 0.10)
+	idle_style.set_corner_radius_all(36)
+	idle_style.set_border_width_all(3)
+	idle_style.border_color = Color(1, 1, 1, 0.45)
 	var ok_style := StyleBoxFlat.new()
-	ok_style.bg_color = Color(1, 1, 1, 0.14)
-	ok_style.set_corner_radius_all(50)
-	ok_style.set_border_width_all(2)
-	ok_style.border_color = Color(1, 1, 1, 0.5)
+	ok_style.bg_color = Color(1, 1, 1, 0.22)
+	ok_style.set_corner_radius_all(36)
+	ok_style.set_border_width_all(3)
+	ok_style.border_color = Color(1, 1, 1, 0.7)
 	var blocked_style := StyleBoxFlat.new()
-	blocked_style.bg_color = Color(0.9, 0.2, 0.2, 0.14)
-	blocked_style.set_corner_radius_all(50)
-	blocked_style.set_border_width_all(2)
-	blocked_style.border_color = Color(0.9, 0.3, 0.3, 0.55)
-	var hover_styles: Dictionary = {"ok": ok_style, "blocked": blocked_style}
+	blocked_style.bg_color = Color(0.9, 0.2, 0.2, 0.22)
+	blocked_style.set_corner_radius_all(36)
+	blocked_style.set_border_width_all(3)
+	blocked_style.border_color = Color(0.9, 0.3, 0.3, 0.7)
+	var hover_styles: Dictionary = {"ok": ok_style, "blocked": blocked_style, "idle": idle_style}
 
 	for l in lanes:
 		for i in range(l.slot_count):
 			var btn := Button.new()
 			btn.text = ""
-			btn.custom_minimum_size = Vector2(100, 100)
+			btn.custom_minimum_size = Vector2(72, 72)
 			btn.focus_mode = Control.FOCUS_NONE
-			btn.flat = true
+			# flat = false: we WANT the "normal" (idle, unhovered) stylebox to
+			# actually draw all the time — flat = true (the old behavior, back
+			# when slots were meant to be invisible until hovered) suppresses
+			# the normal-state stylebox entirely regardless of what's assigned
+			# to it, which is exactly why a persistent grid needs this off.
+			btn.flat = false
 			for state in ["normal", "hover", "pressed", "disabled"]:
-				btn.add_theme_stylebox_override(state, empty_style)
-			var top_left: Vector2 = l.slot_to_screen(i) - Vector2(50, 50)
+				btn.add_theme_stylebox_override(state, idle_style)
+			var top_left: Vector2 = l.slot_to_screen(i) - Vector2(36, 36)
 			btn.position = top_left
 			btn.pressed.connect(_on_slot_pressed.bind(l, i))
 			btn.mouse_entered.connect(_on_slot_hover.bind(l, i, btn, hover_styles))
-			btn.mouse_exited.connect(_on_slot_unhover.bind(btn, empty_style))
+			btn.mouse_exited.connect(_on_slot_unhover.bind(btn, idle_style))
 			add_child(btn)
 			slot_buttons.append(btn)
 
@@ -156,7 +246,12 @@ func _create_slot_buttons() -> void:
 func _on_slot_hover(l: Lane, i: int, btn: Button, hover_styles: Dictionary) -> void:
 	var stats: Dictionary = GameData.DEFENDER_STATS[selected_type]
 	var placeable: bool = l.can_place(i) and rp >= stats.cost
-	btn.add_theme_stylebox_override("normal", hover_styles.ok if placeable else hover_styles.blocked)
+	var style: StyleBox = hover_styles.ok if placeable else hover_styles.blocked
+	# Godot actually displays the "hover" stylebox while the mouse is over the
+	# button (not "normal") — override both so the feedback shows regardless
+	# of exactly which state Godot picks at that instant.
+	btn.add_theme_stylebox_override("normal", style)
+	btn.add_theme_stylebox_override("hover", style)
 
 	# Preview an aura defender's actual coverage before spending RP on it —
 	# shown for any open slot regardless of affordability, since seeing the
@@ -172,8 +267,9 @@ func _on_slot_hover(l: Lane, i: int, btn: Button, hover_styles: Dictionary) -> v
 		preview_aura_ring.visible = true
 
 
-func _on_slot_unhover(btn: Button, empty_style: StyleBox) -> void:
-	btn.add_theme_stylebox_override("normal", empty_style)
+func _on_slot_unhover(btn: Button, idle_style: StyleBox) -> void:
+	btn.add_theme_stylebox_override("normal", idle_style)
+	btn.add_theme_stylebox_override("hover", idle_style)
 	preview_aura_ring.visible = false
 
 
@@ -228,6 +324,11 @@ func _process(delta: float) -> void:
 	rp = min(rp_cap, rp + rp_regen * delta)
 	_update_rp_label()
 
+	time_since_orb += delta
+	if time_since_orb >= ORB_INTERVAL:
+		time_since_orb = 0.0
+		_spawn_resource_orb()
+
 	level_elapsed += delta
 	var interval: float = max(
 		level_config.interval_floor,
@@ -240,8 +341,13 @@ func _process(delta: float) -> void:
 		_spawn_into(target_lane, GameData.weighted_random_enemy(level_config.weights))
 
 	time_since_burst += delta
+	if not wave_warning_shown and time_since_burst >= BURST_INTERVAL - WAVE_WARNING_LEAD:
+		wave_warning_shown = true
+		status_label.text = "A wave is approaching!"
 	if level_elapsed < level_config.duration and time_since_burst >= BURST_INTERVAL:
 		time_since_burst = 0.0
+		wave_warning_shown = false
+		status_label.text = ""
 		for l in lanes:
 			_spawn_into(l, GameData.weighted_random_enemy(level_config.weights))
 
@@ -264,6 +370,22 @@ func _spawn_into(l: Lane, enemy_type: int) -> void:
 		stagger = 0.05
 	for i in range(group_size):
 		l.spawn_enemy(enemy_type, i * stagger)
+
+
+func _spawn_resource_orb() -> void:
+	var orb: ResourceOrb = ORB_SCENE.instantiate()
+	add_child(orb)
+	var lane_index: int = randi() % lanes.size()
+	orb.position = Vector2(randf_range(160.0, 900.0), 0.0)
+	orb.fall_target_y = lanes[lane_index].lane_y
+	orb.collected.connect(_on_orb_collected.bind(orb))
+	active_orbs.append(orb)
+
+
+func _on_orb_collected(amount: int, orb: ResourceOrb) -> void:
+	rp = min(rp_cap, rp + amount)
+	_update_rp_label()
+	active_orbs.erase(orb)
 
 
 func _all_lanes_clear() -> bool:

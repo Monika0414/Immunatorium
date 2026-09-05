@@ -11,7 +11,7 @@ slot_origin_x = 120.0
 lane_y = 300.0
 
 [node name="VesselOutline" type="Line2D" parent="."]
-width = 104.0
+width = 78.0
 default_color = Color(0.4, 0.1, 0.13, 1)
 joint_mode = 2
 begin_cap_mode = 2
@@ -19,7 +19,7 @@ end_cap_mode = 2
 antialiased = true
 
 [node name="VesselFill" type="Line2D" parent="."]
-width = 86.0
+width = 62.0
 default_color = Color(0.68, 0.24, 0.26, 0.92)
 joint_mode = 2
 begin_cap_mode = 2
@@ -42,7 +42,7 @@ antialiased = true
 
 [node name="Body" type="Node2D" parent="Core"]
 script = ExtResource("2")
-radius = 50.0
+radius = 36.0
 color = Color(0.75, 0.15, 0.2, 1)
 outline_color = Color(1, 0.85, 0.85, 0.6)
 outline_width = 3.0

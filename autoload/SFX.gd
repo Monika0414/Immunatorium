@@ -19,6 +19,18 @@ func _ready() -> void:
 		_players.append(p)
 
 
+## Stops playback and drops every cached stream reference. Not needed for
+## normal gameplay (the pool just keeps reusing itself) — this exists so a
+## short-lived process (tests, or a future clean shutdown path) can release
+## the generated AudioStreamWAV/AudioStreamPlaybackWAV resources deterministically
+## instead of leaving them for engine teardown to report as "leaked".
+func stop_all() -> void:
+	for p in _players:
+		p.stop()
+		p.stream = null
+	_cache.clear()
+
+
 func play_place() -> void:
 	_play(_cached("place", func(): return _sweep(260.0, 380.0, 0.07, "sine")), -4.0)
 
