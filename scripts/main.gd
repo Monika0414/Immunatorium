@@ -14,7 +14,9 @@ extends Node2D
 @onready var level_label: Label = $UI/LevelLabel
 @onready var field_note_label: Label = $UI/FieldNoteLabel
 @onready var intro_layer: CanvasLayer = $IntroLayer
-@onready var start_button: Button = $IntroLayer/Panel/StartButton
+@onready var intro_next_button: Button = $IntroLayer/Panel/StartButton
+@onready var intro_dialogue_label: Label = $IntroLayer/Panel/RulesLabel
+@onready var doctor_sprite: TextureRect = $IntroLayer/DoctorSprite
 @onready var game_over_layer: CanvasLayer = $GameOverLayer
 @onready var game_over_title: Label = $GameOverLayer/Panel/TitleLabel
 @onready var game_over_subtitle: Label = $GameOverLayer/Panel/SubtitleLabel
@@ -32,6 +34,22 @@ var time_since_orb: float = 0.0
 var active_orbs: Array = []
 
 var defender_cards: Array = []  # [{"btn": Button, "cost": int}, ...] — built once in _build_defender_bar()
+
+# Intro dialogue (spec: doctor greets the player over 3 lines, "Next" advances
+# each one, and the final "Next" click both closes the intro and starts the
+# level — there's no separate "Start" button/label).
+const DOCTOR_LINES: Array[String] = [
+	"Hey buddy. It's quite bloody here isn't it?",
+	"My patient is having quite a trouble here. He cut his hand while climbing a tree to impress his girlfriend. Teens nowadays are crazy, aren't they. Anyway, infection got in through the wound and now your mission is to defend so he doesn't go out of the dating market forever.",
+	"Good luck!",
+]
+var intro_line_index: int = 0
+
+const DOCTOR_IDLE_TEXTURE: Texture2D = preload("res://art/characters/doctor_idle.png")
+const DOCTOR_TALK_TEXTURE: Texture2D = preload("res://art/characters/doctor_talk.png")
+const DOCTOR_TALK_FRAME_TIME: float = 0.28
+var _doctor_talk_timer: float = 0.0
+var _doctor_mouth_open: bool = false
 
 # One entry per recruitable defender. Level 1's whole roster; adding a new
 # one later is a single line here (no new Main.tscn node needed — the icon
@@ -95,7 +113,11 @@ func _ready() -> void:
 
 	$UI/Level1Button.pressed.connect(_load_level.bind(1))
 	retry_button.pressed.connect(_load_level.bind(1))
-	start_button.pressed.connect(_on_start_pressed)
+	intro_next_button.pressed.connect(_on_intro_next_pressed)
+
+	doctor_sprite.expand_mode = TextureRect.EXPAND_FIT_HEIGHT_PROPORTIONAL
+	doctor_sprite.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	intro_dialogue_label.text = DOCTOR_LINES[0]
 
 	_create_slot_buttons()
 	game_over = true  # paused behind the intro popup until Start is pressed
@@ -197,6 +219,24 @@ func _refresh_defender_bar_affordability() -> void:
 		entry.btn.modulate = Color.WHITE if affordable else Color(0.42, 0.42, 0.42)
 
 
+## Cheap "is she talking" cel-swap: alternates idle/talk textures on a fixed
+## interval for as long as the intro dialogue is on screen.
+func _update_doctor_talk_cycle(delta: float) -> void:
+	_doctor_talk_timer += delta
+	if _doctor_talk_timer >= DOCTOR_TALK_FRAME_TIME:
+		_doctor_talk_timer = 0.0
+		_doctor_mouth_open = not _doctor_mouth_open
+		doctor_sprite.texture = DOCTOR_TALK_TEXTURE if _doctor_mouth_open else DOCTOR_IDLE_TEXTURE
+
+
+func _on_intro_next_pressed() -> void:
+	intro_line_index += 1
+	if intro_line_index < DOCTOR_LINES.size():
+		intro_dialogue_label.text = DOCTOR_LINES[intro_line_index]
+	else:
+		_on_start_pressed()
+
+
 func _on_start_pressed() -> void:
 	intro_layer.visible = false
 	_load_level(1)
@@ -229,6 +269,7 @@ func _load_level(level_id: int) -> void:
 	total_overkill = 0.0
 
 	for l in lanes:
+		l.set_process(true)  # undo the freeze _end_game() applies on win/loss
 		l.reset()
 
 	for orb in active_orbs.duplicate():
@@ -359,6 +400,9 @@ func _flash_status(text: String) -> void:
 
 
 func _process(delta: float) -> void:
+	if intro_layer.visible:
+		_update_doctor_talk_cycle(delta)
+
 	if game_over:
 		return
 
@@ -572,6 +616,12 @@ func _compute_efficiency_grade() -> Dictionary:
 
 func _end_game(won: bool) -> void:
 	game_over = true
+	# Stop combat resolution outright — game_over alone only gates spawning
+	# (see the checks below in _process), but Lane._process() drives its own
+	# movement/attacks every frame regardless, so without this, enemies kept
+	# advancing and defenders kept fighting behind the game-over popup.
+	for l in lanes:
+		l.set_process(false)
 	if won:
 		var result: Dictionary = _compute_efficiency_grade()
 		game_over_title.text = "LEVEL COMPLETE!"

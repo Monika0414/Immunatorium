@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://scripts/ambient_particles.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/aura_ring.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/wound_shape.gd" id="5"]
+[ext_resource type="Texture2D" path="res://art/characters/doctor_idle.png" id="6"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -128,46 +129,36 @@ anchor_bottom = 1.0
 mouse_filter = 0
 color = Color(0, 0, 0, 0.75)
 
+[node name="DoctorSprite" type="TextureRect" parent="IntroLayer"]
+offset_left = 16.0
+offset_top = 140.0
+offset_right = 336.0
+offset_bottom = 620.0
+texture = ExtResource("6")
+
 [node name="Panel" type="Panel" parent="IntroLayer"]
-offset_left = 316.0
-offset_top = 154.0
-offset_right = 836.0
-offset_bottom = 494.0
+offset_left = 300.0
+offset_top = 24.0
+offset_right = 1130.0
+offset_bottom = 210.0
 mouse_filter = 0
 
-[node name="TitleLabel" type="Label" parent="IntroLayer/Panel"]
-offset_left = 16.0
-offset_top = 14.0
-offset_right = 504.0
-offset_bottom = 48.0
-theme_override_font_sizes/font_size = 24
-horizontal_alignment = 1
-text = "IMMUNATORIUM"
-
 [node name="RulesLabel" type="Label" parent="IntroLayer/Panel"]
-offset_left = 24.0
-offset_top = 52.0
-offset_right = 496.0
-offset_bottom = 260.0
-theme_override_font_sizes/font_size = 15
+offset_left = 20.0
+offset_top = 16.0
+offset_right = 790.0
+offset_bottom = 140.0
+theme_override_font_sizes/font_size = 18
 autowrap_mode = 3
-text = "Germs snuck in through a wound. Rude.
-
-Place immune cells along the vessels to zap them before they reach your Core.
-
-• Click glowing orbs for RP — your recruitment budget.
-• Support cells don't fight, they hype up whoever's next to them.
-• \"Wave incoming\" means duck — every lane gets rushed at once.
-
-Body Health hits zero, it's game over. Don't. Go be a hero cell."
+text = "Hey buddy. It's quite bloody here isn't it?"
 
 [node name="StartButton" type="Button" parent="IntroLayer/Panel"]
-offset_left = 190.0
-offset_top = 276.0
-offset_right = 330.0
-offset_bottom = 312.0
-theme_override_font_sizes/font_size = 18
-text = "Start"
+offset_left = 730.0
+offset_top = 136.0
+offset_right = 820.0
+offset_bottom = 176.0
+theme_override_font_sizes/font_size = 16
+text = "Next"
 
 [node name="GameOverLayer" type="CanvasLayer" parent="."]
 layer = 10
