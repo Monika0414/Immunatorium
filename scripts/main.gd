@@ -404,6 +404,8 @@ func _on_slot_unhover(btn: Button, idle_style: StyleBox) -> void:
 
 
 func _select_type(type: int) -> void:
+	if game_over or paused:
+		return
 	selected_type = type
 	_update_selected_label()
 
@@ -414,7 +416,7 @@ func _update_selected_label() -> void:
 
 
 func _on_slot_pressed(l: Lane, i: int) -> void:
-	if game_over:
+	if game_over or paused:
 		return
 	var occupant: Defender = l.slots[i]
 	if occupant != null:
@@ -683,6 +685,17 @@ func _on_pause_pressed() -> void:
 	# enemies and defenders kept fighting behind the pause.
 	for l in lanes:
 		l.set_process(not paused)
+	# ResourceOrbs aren't children of any Lane (see _spawn_orb), so they need
+	# their own freeze — otherwise falling/landed orbs kept drifting and
+	# fading out (and RP kept landing when clicked) while everything else
+	# on the board had visibly stopped.
+	for orb in active_orbs:
+		if is_instance_valid(orb):
+			orb.set_process(not paused)
+			# ResourceOrb is a Button — collection happens on its own "pressed"
+			# signal, independent of _process, so freezing _process alone
+			# wouldn't stop a click from still landing RP while paused.
+			orb.disabled = paused
 	pause_icon.icon = IconGlyph.Icon.PLAY if paused else IconGlyph.Icon.PAUSE
 	pause_button.tooltip_text = "Continue" if paused else "Pause"
 
