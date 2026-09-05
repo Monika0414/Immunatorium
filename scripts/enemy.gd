@@ -97,7 +97,9 @@ func _on_sprite_animation_finished() -> void:
 
 
 func _update_label() -> void:
-	hp_label.text = "%s\n%d/%d" % [GameData.enemy_name(type), int(ceil(hp)), int(max_hp)]
+	# Just the HP fraction — no enemy name overhead (the visual design already
+	# reads clearly enough without a floating name tag over every germ).
+	hp_label.text = "%d/%d" % [int(ceil(hp)), int(max_hp)]
 
 
 func take_damage(amount: float) -> void:
