@@ -28,7 +28,7 @@ const DEFENDER_STATS := {
 	# more resources over time" has a real basis, not just a game abstraction.
 	# Cheap relative to attackers (mirrors Sunflower costing half a Peashooter)
 	# to reward early economy investment.
-	DefenderType.STEM_CELL: {"hp": 15.0, "power": 0.0, "attack_rate": 0.0, "range": 0, "cost": 30, "color": Color8(190, 220, 90), "produces_orb_interval": 14.0, "produces_orb_amount": 12},
+	DefenderType.STEM_CELL: {"hp": 15.0, "power": 0.0, "attack_rate": 0.0, "range": 0, "cost": 30, "color": Color8(190, 220, 90), "produces_orb_interval": 14.0, "produces_orb_amount": 12, "sprite": "res://art/defenders/stem_cell_idle.png"},
 	# Not in DEFENDER_ROSTER yet (main.gd) — spec 2.2 stats filled in now so
 	# adding them to the roster later really is "a single line", matching
 	# TYPE_MULTIPLIER/DEFENDER_NAMES/DEFENDER_ABILITIES, which already had
