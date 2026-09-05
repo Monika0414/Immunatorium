@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/aura_ring.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/wound_shape.gd" id="5"]
 [ext_resource type="Texture2D" path="res://art/characters/doctor_idle.png" id="6"]
+[ext_resource type="Script" path="res://scripts/icon_glyph.gd" id="7"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -102,12 +103,33 @@ theme_override_font_sizes/font_size = 18
 horizontal_alignment = 2
 text = "Level 1: Skin — The Wound"
 
-[node name="Level1Button" type="Button" parent="UI"]
-offset_left = 1010.0
+[node name="PauseButton" type="Button" parent="UI"]
+offset_left = 1030.0
+offset_top = 56.0
+offset_right = 1066.0
+offset_bottom = 90.0
+tooltip_text = "Pause"
+
+[node name="PauseIcon" type="Control" parent="UI/PauseButton"]
+script = ExtResource("7")
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+icon = 0
+
+[node name="RestartButton" type="Button" parent="UI"]
+offset_left = 1094.0
 offset_top = 56.0
 offset_right = 1130.0
-offset_bottom = 86.0
-text = "Restart Level"
+offset_bottom = 90.0
+tooltip_text = "Restart Level"
+
+[node name="RestartIcon" type="Control" parent="UI/RestartButton"]
+script = ExtResource("7")
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+icon = 2
 
 [node name="DefenderSidebarPanel" type="Panel" parent="UI"]
 offset_left = 4.0

@@ -23,6 +23,9 @@ extends Node2D
 @onready var retry_button: Button = $GameOverLayer/Panel/RetryButton
 @onready var preview_aura_ring: AuraRing = $PreviewAuraRing
 @onready var defender_bar: VBoxContainer = $UI/DefenderBar
+@onready var pause_button: Button = $UI/PauseButton
+@onready var pause_icon: IconGlyph = $UI/PauseButton/PauseIcon
+@onready var restart_button: Button = $UI/RestartButton
 
 var rp: float = 50.0
 var rp_cap: float = 150.0
@@ -39,9 +42,9 @@ var defender_cards: Array = []  # [{"btn": Button, "cost": int}, ...] — built 
 # each one, and the final "Next" click both closes the intro and starts the
 # level — there's no separate "Start" button/label).
 const DOCTOR_LINES: Array[String] = [
-	"[i]Oh good, you're here.[/i] Hey buddy — it's quite [b]bloody[/b] in here, isn't it?",
-	"So. My patient thought climbing a tree was a great way to impress his girlfriend. [b]Bold strategy.[/b] Cut his hand wide open, infection strolled right in, and now — congratulations — [i]you're[/i] the only thing standing between him and being single forever.",
-	"[b]Good luck.[/b] [i]Try not to lose him.[/i] No pressure.",
+	"[i]Oh good, you're here.[/i] Hey buddy — it's quite bloody in here, isn't it?",
+	"So. My patient thought climbing a tree was a great way to impress his girlfriend. [i]Bold strategy.[/i] Cut his hand wide open, infection strolled right in, and now — congratulations — [i]you're[/i] the only thing standing between him and being single forever.",
+	"Good luck. [i]Try not to lose him.[/i] No pressure.",
 ]
 var intro_line_index: int = 0
 
@@ -88,6 +91,7 @@ var level_elapsed: float = 0.0
 var time_since_spawn: float = 0.0
 var game_over: bool = false
 var game_over_won: bool = false  # set by _end_game() — lets tests check outcome without parsing display copy/flavor text
+var paused: bool = false
 
 ## --- Wave-scripted levels (level_config.has("waves"), see GameData.LEVELS) ---
 var wave_index: int = 0
@@ -123,7 +127,8 @@ func _ready() -> void:
 
 	_build_defender_bar()
 
-	$UI/Level1Button.pressed.connect(_load_level.bind(1))
+	restart_button.pressed.connect(_load_level.bind(1))
+	pause_button.pressed.connect(_on_pause_pressed)
 	retry_button.pressed.connect(_load_level.bind(1))
 	intro_next_button.pressed.connect(_on_intro_next_pressed)
 
@@ -297,6 +302,9 @@ func _load_level(level_id: int) -> void:
 	time_since_trickle = 0.0
 	final_wave_fired = false
 	game_over = false
+	paused = false
+	pause_icon.icon = IconGlyph.Icon.PAUSE
+	pause_button.tooltip_text = "Pause"
 	status_label.text = ""
 	field_note_label.visible = false
 	preview_aura_ring.visible = false
@@ -443,7 +451,7 @@ func _process(delta: float) -> void:
 	if intro_layer.visible:
 		_update_doctor_talk_cycle(delta)
 
-	if game_over:
+	if game_over or paused:
 		return
 
 	rp = min(rp_cap, rp + rp_regen * delta)
@@ -663,6 +671,20 @@ const GRADE_FLAVOR: Dictionary = {
 	"B": {"color": "#7fc7e8", "line": "He'll live. Barely. Might want to rethink tree-climbing."},
 	"C": {"color": "#e8a15c", "line": "Scraped through. Please never do that again."},
 }
+
+
+func _on_pause_pressed() -> void:
+	if game_over:
+		return  # nothing to pause once the level's already over
+	paused = not paused
+	# Same freeze mechanism _end_game() uses: game_over/paused alone only gate
+	# spawning and Main's own _process (see the check above), but each Lane
+	# drives its own movement/attacks every frame regardless, so without this,
+	# enemies and defenders kept fighting behind the pause.
+	for l in lanes:
+		l.set_process(not paused)
+	pause_icon.icon = IconGlyph.Icon.PLAY if paused else IconGlyph.Icon.PAUSE
+	pause_button.tooltip_text = "Continue" if paused else "Pause"
 
 
 func _end_game(won: bool) -> void:
